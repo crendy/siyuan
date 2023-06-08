@@ -19,7 +19,7 @@ RUN apk add --no-cache gcc musl-dev git && \
     find /opt/siyuan/ -name .git | xargs rm -rf
 
 FROM alpine:latest
-LABEL maintainer="Liang Ding<845765@qq.com>"
+LABEL maintainer="crendy<crendy@126.com>"
 
 WORKDIR /opt/siyuan/
 COPY --from=GO_BUILD /opt/siyuan/ /opt/siyuan/
@@ -40,13 +40,11 @@ RUN \
       /root/.cache \
       /tmp/* 
 
-# copy local files
-COPY root/ /
-
 ENV TZ=Asia/Shanghai
 ENV WORKSPACE=/siyuan/workspace/
 ENV ACCESSAUTHCODE=
 ENV PUID=0
 ENV PGID=0
+ENV RUN_IN_CONTAINER=true
 VOLUME /siyuan/workspace/
 EXPOSE 6806
