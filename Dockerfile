@@ -6,7 +6,8 @@ RUN cd app && npm install -g pnpm && pnpm install && pnpm run build
 FROM golang:alpine as GO_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 COPY --from=NODE_BUILD /go/src/github.com/siyuan-note/siyuan/ /go/src/github.com/siyuan-note/siyuan/
-ENV GO111MODULE=on
+ENV GO111MODULE=on \
+    GOPROXY=https://goproxy.cn,direct
 ENV CGO_ENABLED=1
 RUN apk add --no-cache gcc musl-dev git && \
     cd kernel && go build --tags fts5 -v -ldflags "-s -w -X github.com/siyuan-note/siyuan/kernel/util.Mode=prod" && \
