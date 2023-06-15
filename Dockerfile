@@ -1,11 +1,11 @@
 #FROM node:16 as NODE_BUILD
-FROM https://hub-mirror.c.163.com/node:16 as NODE_BUILD
+FROM registry.cn-hangzhou.aliyuncs.com/library/node:16 as NODE_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 ADD . /go/src/github.com/siyuan-note/siyuan/
 RUN cd app && npm install -g pnpm && pnpm install && pnpm run build
 
 #FROM golang:alpine as GO_BUILD
-FROM https://hub-mirror.c.163.com/golang:alpine as GO_BUILD
+FROM registry.cn-hangzhou.aliyuncs.com/library/golang:alpine as GO_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 COPY --from=NODE_BUILD /go/src/github.com/siyuan-note/siyuan/ /go/src/github.com/siyuan-note/siyuan/
 ENV GO111MODULE=on \
