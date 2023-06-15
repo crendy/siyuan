@@ -21,7 +21,7 @@ RUN apk add --no-cache gcc musl-dev git && \
     mv /go/src/github.com/siyuan-note/siyuan/kernel/kernel /opt/siyuan/ && \
     find /opt/siyuan/ -name .git | xargs rm -rf
 
-FROM alpine:latest
+FROM registry.cn-hangzhou.aliyuncs.com/crendy/alpine:latest
 LABEL maintainer="crendy<crendy@126.com>"
 
 WORKDIR /opt/siyuan/
