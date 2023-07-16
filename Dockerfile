@@ -44,10 +44,10 @@ RUN \
       /tmp/* 
 
 ENV TZ=Asia/Shanghai
-ENV WORKSPACE=/siyuan/workspace/
+ENV WORKSPACE=/root/SiYuan
 ENV ACCESSAUTHCODE=
 ENV PUID=0
 ENV PGID=0
 ENV RUN_IN_CONTAINER=true
-VOLUME /siyuan/workspace/
+VOLUME /root/SiYuan
 EXPOSE 6806
