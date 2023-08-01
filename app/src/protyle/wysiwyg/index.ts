@@ -87,8 +87,9 @@ export class WYSIWYG {
         this.element = document.createElement("div");
         this.element.className = "protyle-wysiwyg";
         this.element.setAttribute("spellcheck", "false");
-        if (navigator && navigator.maxTouchPoints > 1 && navigator.platform === "MacIntel") {
+        if (isMobile()) {
             // iPhone，iPad 端输入 contenteditable 为 true 时会在块中间插入 span
+            // Android 端空块输入法弹出会收起 https://ld246.com/article/1689713888289
             this.element.setAttribute("contenteditable", "false");
         } else {
             this.element.setAttribute("contenteditable", "true");
@@ -342,7 +343,7 @@ export class WYSIWYG {
             const rect = protyle.element.getBoundingClientRect();
             const mostLeft = rect.left + parseInt(protyle.wysiwyg.element.style.paddingLeft) + 1;
             // 不能用 firstElement，否则 https://ld246.com/article/1668758661338
-            const mostRight = mostLeft + (protyle.wysiwyg.element.clientWidth - parseInt(protyle.wysiwyg.element.style.paddingLeft) - parseInt(protyle.wysiwyg.element.style.paddingRight)) - 1;
+            const mostRight = mostLeft + (protyle.wysiwyg.element.clientWidth - parseInt(protyle.wysiwyg.element.style.paddingLeft) - parseInt(protyle.wysiwyg.element.style.paddingRight)) - 2;
             const mostBottom = rect.bottom;
             const y = event.clientY;
 
@@ -358,8 +359,8 @@ export class WYSIWYG {
                 const dragColId = dragElement.getAttribute("data-col-id");
                 let newWidth: string;
                 documentSelf.onmousemove = (moveEvent: MouseEvent) => {
-                    newWidth = oldWidth + (moveEvent.clientX - event.clientX) + "px";
-                    dragElement.parentElement.parentElement.querySelectorAll(".av__row").forEach(item => {
+                    newWidth = Math.max(oldWidth + (moveEvent.clientX - event.clientX), 100) + "px";
+                    dragElement.parentElement.parentElement.querySelectorAll(".av__row, .av__row--footer").forEach(item => {
                         (item.querySelector(`[data-col-id="${dragColId}"]`) as HTMLElement).style.width = newWidth;
                     });
                 };
@@ -373,12 +374,12 @@ export class WYSIWYG {
                     transaction(protyle, [{
                         action: "setAttrViewColWidth",
                         id: dragColId,
-                        parentID: avId,
+                        avID: avId,
                         data: newWidth
                     }], [{
                         action: "setAttrViewColWidth",
                         id: dragColId,
-                        parentID: avId,
+                        avID: avId,
                         data: oldWidth + "px"
                     }]);
                 };
@@ -649,17 +650,17 @@ export class WYSIWYG {
                 hideElements(["select"], protyle);
                 let firstElement;
                 if (moveEvent.clientY > y) {
-                    firstElement = startFirstElement || document.elementFromPoint(newLeft - 1, newTop);
+                    firstElement = startFirstElement || document.elementFromPoint(newLeft, newTop);
                     endLastElement = undefined;
                 } else {
-                    firstElement = document.elementFromPoint(newLeft - 1, newTop);
+                    firstElement = document.elementFromPoint(newLeft, newTop);
                     startFirstElement = undefined;
                 }
                 if (!firstElement) {
                     return;
                 }
                 if (firstElement.classList.contains("protyle-wysiwyg") || firstElement.classList.contains("list") || firstElement.classList.contains("sb") || firstElement.classList.contains("bq")) {
-                    firstElement = document.elementFromPoint(newLeft - 1, newTop + 16);
+                    firstElement = document.elementFromPoint(newLeft, newTop + 16);
                 }
                 if (!firstElement) {
                     return;
@@ -1016,15 +1017,12 @@ export class WYSIWYG {
 
     private bindEvent(protyle: IProtyle) {
         this.element.addEventListener("focusout", () => {
-            if (getSelection().rangeCount > 0 && !this.element.contains(getSelection().getRangeAt(0).startContainer)) {
-                // 对 ctrl+tab 切换后 range 已经在新页面中才会触发的 focusout 进行忽略，因为在切换之前已经 dispatchEvent 了。
-                if (!protyle.toolbar.range) {
-                    protyle.toolbar.range = this.element.ownerDocument.createRange();
-                    protyle.toolbar.range.setStart(getContenteditableElement(this.element) || this.element, 0);
-                    protyle.toolbar.range.collapse(true);
-                }
-            } else {
-                protyle.toolbar.range = getEditorRange(this.element);
+            if (getSelection().rangeCount === 0) {
+                return;
+            }
+            const range = getSelection().getRangeAt(0);
+            if (this.element.isSameNode(range.startContainer) || this.element.contains(range.startContainer)) {
+                protyle.toolbar.range = range;
             }
         });
 
@@ -1565,7 +1563,14 @@ export class WYSIWYG {
                     event
                 });
             });
-            hideElements(["hint", "util"], protyle);
+
+            const addRowElement = hasClosestByClassName(event.target, "av__row--add");
+            if (addRowElement) {
+                hideElements(["util"], protyle);
+            } else {
+                hideElements(["hint", "util"], protyle);
+            }
+
             const ctrlIsPressed = event.metaKey || event.ctrlKey;
             /// #if !MOBILE
             const backlinkBreadcrumbItemElement = hasClosestByClassName(event.target, "protyle-breadcrumb__item");
@@ -2005,6 +2010,12 @@ export class WYSIWYG {
                         range.selectNodeContents(emptyEditElement);
                         range.collapse(true);
                         focusByRange(range);
+                        // 需等待 range 更新再次进行渲染
+                        if (protyle.options.render.breadcrumb) {
+                            setTimeout(() => {
+                                protyle.breadcrumb.render(protyle);
+                            }, Constants.TIMEOUT_TRANSITION);
+                        }
                     } else if (lastEditElement) {
                         range.selectNodeContents(lastEditElement);
                         range.collapse(false);

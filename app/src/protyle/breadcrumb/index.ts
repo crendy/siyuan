@@ -325,6 +325,7 @@ export class Breadcrumb {
             if (!protyle.disabled) {
                 window.siyuan.menus.menu.append(new MenuItem({
                     label: window.siyuan.languages.optimizeTypography,
+                    accelerator: window.siyuan.config.keymap.editor.general.optimizeTypography.custom,
                     icon: "iconFormat",
                     click: () => {
                         hideElements(["toolbar"], protyle);
@@ -467,7 +468,12 @@ export class Breadcrumb {
         if (getSelection().rangeCount > 0) {
             range = getSelection().getRangeAt(0);
             if (!protyle.wysiwyg.element.isEqualNode(range.startContainer) && !protyle.wysiwyg.element.contains(range.startContainer)) {
-                blockElement = getNoContainerElement(protyle.wysiwyg.element.firstElementChild) || protyle.wysiwyg.element.firstElementChild;
+               if (protyle.element.id ==="searchPreview") {
+                   // https://github.com/siyuan-note/siyuan/issues/8807
+                   blockElement = hasClosestBlock(protyle.wysiwyg.element.querySelector('[data-type="search-mark"]')) as Element;
+               } else {
+                   blockElement = getNoContainerElement(protyle.wysiwyg.element.firstElementChild) || protyle.wysiwyg.element.firstElementChild;
+               }
             } else {
                 blockElement = hasClosestBlock(range.startContainer) as Element;
             }

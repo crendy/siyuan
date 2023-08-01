@@ -602,6 +602,7 @@ const dragSame = async (protyle: IProtyle, sourceElements: Element[], targetElem
         });
     }
     if (!isCopy &&
+        isSameDoc &&    // 同一文档分屏后，oldSourceParentElement 已经被移走，不可再 update https://github.com/siyuan-note/siyuan/issues/8863
         oldSourceParentElement && oldSourceParentElement.classList.contains("list") &&
         oldSourceParentElement.getAttribute("data-subtype") === "o" &&
         !oldSourceParentElement.isSameNode(sourceElements[0].parentElement) && oldSourceParentElement.childElementCount > 1) {
@@ -714,7 +715,7 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
                 return;
             } else if (target.classList.contains("av__cellheader")) {
                 window.siyuan.dragElement = target.parentElement;
-                event.dataTransfer.setData(`${Constants.SIYUAN_DROP_GUTTER}NodeAttributeView${Constants.ZWSP}Col${Constants.ZWSP}${[target.parentElement.getAttribute("data-id")]}`,
+                event.dataTransfer.setData(`${Constants.SIYUAN_DROP_GUTTER}NodeAttributeView${Constants.ZWSP}Col${Constants.ZWSP}${[target.parentElement.getAttribute("data-col-id")]}`,
                     target.innerHTML);
                 return;
             } else if (target.classList.contains("av__gutters")) {
@@ -823,16 +824,16 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
                     if (!blockElement) {
                         return;
                     }
-                    const avId = blockElement.getAttribute("data-av-id");
+                    const avID = blockElement.getAttribute("data-av-id");
                     transaction(protyle, [{
                         action: "sortAttrViewCol",
-                        parentID: avId,
-                        previousID: (targetElement.classList.contains("dragover__left") ? targetElement.previousElementSibling?.getAttribute("data-id") : targetElement.getAttribute("data-id")) || "",
+                        avID,
+                        previousID: (targetElement.classList.contains("dragover__left") ? targetElement.previousElementSibling?.getAttribute("data-col-id") : targetElement.getAttribute("data-col-id")) || "",
                         id: gutterTypes[2],
                     }], [{
                         action: "sortAttrViewCol",
-                        parentID: avId,
-                        previousID: targetElement.parentElement.querySelector(`[data-id="${gutterTypes[2]}"`).previousElementSibling?.getAttribute("data-id") || "",
+                        avID,
+                        previousID: targetElement.parentElement.querySelector(`[data-col-id="${gutterTypes[2]}"`).previousElementSibling?.getAttribute("data-col-id") || "",
                         id: gutterTypes[2],
                     }]);
                     return;
@@ -849,7 +850,7 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
                     } else {
                         previousID = targetElement.previousElementSibling?.getAttribute("data-id") || "";
                     }
-                    const avId = blockElement.getAttribute("data-av-id");
+                    const avID = blockElement.getAttribute("data-av-id");
                     if (gutterTypes[0] === "nodeattributeview" && gutterTypes[1] === "row") {
                         // 行内拖拽
                         const doOperations: IOperation[] = [];
@@ -858,13 +859,13 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
                         selectedIds.reverse().forEach(item => {
                             doOperations.push({
                                 action: "sortAttrViewRow",
-                                parentID: avId,
+                                avID,
                                 previousID,
                                 id: item,
                             });
                             undoOperations.push({
                                 action: "sortAttrViewRow",
-                                parentID: avId,
+                                avID,
                                 previousID: undoPreviousId,
                                 id: item,
                             });
@@ -873,13 +874,13 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
                     } else {
                         transaction(protyle, [{
                             action: "insertAttrViewBlock",
-                            parentID: avId,
+                            avID,
                             previousID,
                             srcIDs: sourceIds,
                         }], [{
                             action: "removeAttrViewBlock",
                             srcIDs: sourceIds,
-                            parentID: avId,
+                            avID,
                         }]);
                     }
                     return;
@@ -917,6 +918,31 @@ export const dropEvent = (protyle: IProtyle, editorElement: HTMLElement) => {
             // 文件树拖拽
             const scrollTop = protyle.contentElement.scrollTop;
             const ids = event.dataTransfer.getData(Constants.SIYUAN_DROP_FILE).split(",");
+            if (targetElement.classList.contains("av__row")) {
+                // 拖拽到属性视图内
+                const blockElement = hasClosestBlock(targetElement);
+                if (!blockElement) {
+                    return;
+                }
+                let previousID = "";
+                if (targetElement.classList.contains("dragover__bottom")) {
+                    previousID = targetElement.getAttribute("data-id") || "";
+                } else {
+                    previousID = targetElement.previousElementSibling?.getAttribute("data-id") || "";
+                }
+                const avID = blockElement.getAttribute("data-av-id");
+                transaction(protyle, [{
+                    action: "insertAttrViewBlock",
+                    avID,
+                    previousID,
+                    srcIDs: ids,
+                }], [{
+                    action: "removeAttrViewBlock",
+                    srcIDs: ids,
+                    avID,
+                }]);
+                return;
+            }
             for (let i = 0; i < ids.length; i++) {
                 if (ids[i]) {
                     await fetchSyncPost("/api/filetree/doc2Heading", {

@@ -387,6 +387,7 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 			return fileTreeFiles[i].Sort < fileTreeFiles[j].Sort
 		})
 		ret = append(ret, fileTreeFiles...)
+		totals = len(ret)
 		if maxListCount < len(ret) {
 			ret = ret[:maxListCount]
 		}
@@ -414,6 +415,7 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 		ret = append(ret, docs...)
 	}
 
+	totals = len(ret)
 	if maxListCount < len(ret) {
 		ret = ret[:maxListCount]
 	}
@@ -1574,7 +1576,7 @@ func moveSorts(rootID, fromBox, toBox string) {
 		toFullSortIDs[id] = sortVal
 	}
 
-	data, err := gulu.JSON.MarshalIndentJSON(toFullSortIDs, "", "  ")
+	data, err := gulu.JSON.MarshalJSON(toFullSortIDs)
 	if nil != err {
 		logging.LogErrorf("marshal sort conf failed: %s", err)
 		return
@@ -1649,7 +1651,7 @@ func ChangeFileTreeSort(boxID string, paths []string) {
 		fullSortIDs[sortID] = sortVal
 	}
 
-	data, err = gulu.JSON.MarshalIndentJSON(fullSortIDs, "", "  ")
+	data, err = gulu.JSON.MarshalJSON(fullSortIDs)
 	if nil != err {
 		logging.LogErrorf("marshal sort conf failed: %s", err)
 		return
@@ -1708,7 +1710,7 @@ func (box *Box) removeSort(ids []string) {
 		delete(fullSortIDs, toRemove)
 	}
 
-	data, err = gulu.JSON.MarshalIndentJSON(fullSortIDs, "", "  ")
+	data, err = gulu.JSON.MarshalJSON(fullSortIDs)
 	if nil != err {
 		logging.LogErrorf("marshal sort conf failed: %s", err)
 		return

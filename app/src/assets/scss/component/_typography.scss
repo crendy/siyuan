@@ -6,6 +6,8 @@
 .b3-typography,
 .protyle-wysiwyg {
   font-variant-ligatures: no-common-ligatures;
+  display: flex;
+  flex-direction: column;
 
   img {
     max-width: 100%;
@@ -22,7 +24,7 @@
   [data-node-id] {
     line-height: 1.625;
     padding: 4px;
-    margin: 4px 0;
+    margin: 2px 0;
     border-radius: var(--b3-border-radius);
   }
 
@@ -301,6 +303,11 @@
     font-family: var(--b3-font-family-code);
     min-height: 22px !important;
     overflow-x: overlay;
+
+    &.protyle-linenumber {
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
   }
 
   [data-subtype="echarts"],
@@ -349,7 +356,7 @@
   [data-subtype="graphviz"] {
     text-align: center;
 
-    svg {
+    & > [contenteditable="false"] svg {
       border-radius: var(--b3-border-radius);
 
       /* 由于会覆盖颜色，先移除看看有没有副作用 https://github.com/siyuan-note/siyuan/issues/7735
@@ -479,7 +486,7 @@
 
   &-icon {
     font-size: 85%;
-    line-height: 24px;
+    line-height: 14px;
     cursor: pointer;
     padding: 5px;
     transition: var(--b3-transition);

@@ -3,11 +3,13 @@ import {hasClosestBlock, hasClosestByAttribute, hasClosestByClassName} from "../
 import {transaction} from "../../wysiwyg/transaction";
 import {openEditorTab} from "../../../menus/util";
 import {copySubMenu} from "../../../menus/commonMenuItem";
-import {popTextCell} from "./cell";
+import {openCalcMenu, popTextCell} from "./cell";
 import {getColIconByType, showColMenu, updateHeader} from "./col";
 import {emitOpenMenu} from "../../../plugin/EventBus";
 import {addCol} from "./addCol";
 import {openMenuPanel} from "./openMenuPanel";
+import {hintRef} from "../../hint/extend";
+import {hideElements} from "../../ui/hideElements";
 
 export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLElement }) => {
     const blockElement = hasClosestBlock(event.target);
@@ -70,7 +72,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const headerMoreElement = hasClosestByAttribute(event.target, "data-type", "av-header-more");
     if (headerMoreElement) {
-        openMenuPanel(protyle, blockElement, "properties");
+        openMenuPanel({protyle, blockElement, type: "properties"});
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -78,7 +80,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const moreElement = hasClosestByAttribute(event.target, "data-type", "av-more");
     if (moreElement) {
-        openMenuPanel(protyle, blockElement, "config");
+        openMenuPanel({protyle, blockElement, type: "config"});
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -86,7 +88,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const sortsElement = hasClosestByAttribute(event.target, "data-type", "av-sort");
     if (sortsElement) {
-        openMenuPanel(protyle, blockElement, "sorts");
+        openMenuPanel({protyle, blockElement, type: "sorts"});
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -94,7 +96,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const filtersElement = hasClosestByAttribute(event.target, "data-type", "av-filter");
     if (filtersElement) {
-        openMenuPanel(protyle, blockElement, "filters");
+        openMenuPanel({protyle, blockElement, type: "filters"});
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -110,7 +112,33 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const cellElement = hasClosestByClassName(event.target, "av__cell");
     if (cellElement && !cellElement.parentElement.classList.contains("av__row--header")) {
-        popTextCell(protyle, cellElement);
+        cellElement.parentElement.parentElement.querySelectorAll(".av__row--select").forEach(item => {
+            item.querySelector(".av__firstcol use").setAttribute("xlink:href", "#iconUncheck");
+            item.classList.remove("av__row--select");
+        });
+        popTextCell(protyle, [cellElement]);
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
+    const calcElement = hasClosestByClassName(event.target, "av__calc");
+    if (calcElement) {
+        openCalcMenu(protyle, calcElement);
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
+    const addRowElement = hasClosestByClassName(event.target, "av__row--add");
+    if (addRowElement) {
+        if (protyle.hint.element.classList.contains("fn__none")) {
+            protyle.toolbar.range = document.createRange();
+            protyle.toolbar.range.selectNodeContents(blockElement.querySelector(".av__title"));
+            hintRef("", protyle, "av");
+        } else {
+            hideElements(["hint"], protyle);
+        }
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -162,21 +190,14 @@ export const avContextmenu = (protyle: IProtyle, event: MouseEvent & { detail: a
             transaction(protyle, [{
                 action: "removeAttrViewBlock",
                 srcIDs: blockIds,
-                parentID: blockElement.getAttribute("data-av-id"),
+                avID: blockElement.getAttribute("data-av-id"),
             }], [{
                 action: "insertAttrViewBlock",
-                parentID: blockElement.getAttribute("data-av-id"),
+                avID: blockElement.getAttribute("data-av-id"),
                 previousID: rowElement.previousElementSibling?.getAttribute("data-id") || "",
                 srcIDs: rowIds,
             }]);
             rowElement.remove();
-        }
-    });
-    menu.addItem({
-        icon: "iconCopy",
-        label: window.siyuan.languages.duplicate,
-        click() {
-
         }
     });
     if (rowIds.length === 1) {
@@ -190,21 +211,13 @@ export const avContextmenu = (protyle: IProtyle, event: MouseEvent & { detail: a
         });
     }
     menu.addSeparator();
-    if (rowIds.length === 1) {
-        menu.addItem({
-            icon: "iconEdit",
-            label: window.siyuan.languages.edit,
-            click() {
-
-            }
-        });
-    }
     const editAttrSubmenu: IMenu[] = [];
-    rowElement.parentElement.querySelectorAll(".av__row--header .av__cell").forEach((cellElement) => {
+    rowElement.parentElement.querySelectorAll(".av__row--header .av__cell").forEach((cellElement: HTMLElement) => {
         editAttrSubmenu.push({
             icon: getColIconByType(cellElement.getAttribute("data-dtype") as TAVCol),
             label: cellElement.textContent.trim(),
             click() {
+                popTextCell(protyle, Array.from(blockElement.querySelectorAll(`.av__row--select:not(.av__row--header) .av__cell[data-col-id="${cellElement.dataset.colId}"]`)));
             }
         });
     });
@@ -213,13 +226,6 @@ export const avContextmenu = (protyle: IProtyle, event: MouseEvent & { detail: a
         label: window.siyuan.languages.attr,
         type: "submenu",
         submenu: editAttrSubmenu
-    });
-    menu.addItem({
-        icon: "iconMove",
-        label: window.siyuan.languages.move,
-        click() {
-
-        }
     });
     if (protyle?.app?.plugins) {
         emitOpenMenu({
@@ -246,17 +252,13 @@ export const updateAVName = (protyle: IProtyle, blockElement: Element) => {
         return;
     }
     transaction(protyle, [{
-        action: "setAttrView",
+        action: "setAttrViewName",
         id: avId,
-        data: {
-            name: nameElement.textContent.trim(),
-        }
+        data: nameElement.textContent.trim(),
     }], [{
-        action: "setAttrView",
+        action: "setAttrViewName",
         id: avId,
-        data: {
-            name: nameElement.dataset.title,
-        }
+        name: nameElement.dataset.title,
     }]);
     nameElement.dataset.title = nameElement.textContent.trim();
 };

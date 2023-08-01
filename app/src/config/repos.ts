@@ -1,4 +1,4 @@
-import {needSubscribe} from "../util/needSubscribe";
+import {needLogin, needSubscribe} from "../util/needSubscribe";
 import {fetchPost} from "../util/fetch";
 import {showMessage} from "../dialog/message";
 import {bindSyncCloudListEvent, getSyncCloudList} from "../sync/syncGuide";
@@ -37,15 +37,18 @@ const renderProvider = (provider: number) => {
         return `<div class="b3-label b3-label--inner">
     ${window.siyuan.languages.syncOfficialProviderIntro}
 </div>`;
-    } else if (provider === 2) {
-        const tip = `<div class="b3-label b3-label--inner">
+    }
+    if (needLogin("")) {
+        return `<div class="b3-label b3-label--inner">${window.siyuan.languages.needLogin}</div>`;
+    }
+    if (provider === 2) {
+        return `<div class="b3-label b3-label--inner">
     ${window.siyuan.languages.syncThirdPartyProviderS3Intro}
     <div class="fn__hr"></div>
-    ${window.siyuan.languages.featureBetaStage}
+    <em>${window.siyuan.languages.featureBetaStage}</em>
     <div class="fn__hr"></div>
     ${window.siyuan.languages.syncThirdPartyProviderTip}
-</div>`;
-        return `${tip}
+</div>
 <label class="b3-label b3-label--noborder fn__flex config__item">
     <div class="fn__flex-center fn__size200">Endpoint</div>
     <div class="fn__space"></div>
@@ -96,14 +99,13 @@ const renderProvider = (provider: number) => {
     </select>
 </label>`;
     } else if (provider === 3) {
-        const tip = `<div class="b3-label b3-label--inner">
+        return `<div class="b3-label b3-label--inner">
     ${window.siyuan.languages.syncThirdPartyProviderWebDAVIntro}
     <div class="fn__hr"></div>
-    ${window.siyuan.languages.featureBetaStage}
+    <em>${window.siyuan.languages.featureBetaStage}</em>
     <div class="fn__hr"></div>    
     ${window.siyuan.languages.syncThirdPartyProviderTip}
-</div>`;
-        return `${tip}
+</div>
 <label class="b3-label b3-label--noborder fn__flex config__item">
     <div class="fn__flex-center fn__size200">Endpoint</div>
     <div class="fn__space"></div>
@@ -191,7 +193,11 @@ const bindProviderEvent = () => {
     loadingElement.classList.add("fn__none");
     let nextElement = reposDataElement.nextElementSibling;
     while (nextElement) {
-        nextElement.classList.remove("fn__none");
+        if (!needLogin("")) {
+            nextElement.classList.remove("fn__none");
+        } else {
+            nextElement.classList.add("fn__none");
+        }
         nextElement = nextElement.nextElementSibling;
     }
     reposDataElement.classList.add("fn__none");
@@ -297,7 +303,7 @@ export const repos = {
     <input type="checkbox" id="generateConflictDoc"${window.siyuan.config.sync.generateConflictDoc ? " checked='checked'" : ""} class="b3-switch fn__flex-center">
 </label>
 <div class="b3-label">
-    <div class="fn__flex config__item">
+    <label class="fn__flex config__item">
         <div class="fn__flex-1">
             ${window.siyuan.languages.syncMode}
             <div class="b3-label__text">${window.siyuan.languages.syncModeTip}</div>
@@ -308,7 +314,7 @@ export const repos = {
             <option value="2" ${window.siyuan.config.sync.mode === 2 ? "selected" : ""}>${window.siyuan.languages.syncMode2}</option>
             <option value="3" ${window.siyuan.config.sync.mode === 3 ? "selected" : ""}>${window.siyuan.languages.syncMode3}</option>
         </select>
-    </div>
+    </label>
     <label class="fn__flex b3-label${(window.siyuan.config.sync.mode !== 1 || window.siyuan.config.system.container === "docker" || window.siyuan.config.sync.provider !== 0) ? " fn__none" : ""}">
         <div class="fn__flex-1">
             ${window.siyuan.languages.syncPerception}

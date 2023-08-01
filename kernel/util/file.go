@@ -43,8 +43,12 @@ func IsEmptyDir(p string) bool {
 	return 1 > len(files)
 }
 
+func IsSymlink(dir fs.DirEntry) bool {
+	return dir.Type() == fs.ModeSymlink
+}
+
 func IsDirRegularOrSymlink(dir fs.DirEntry) bool {
-	return dir.IsDir() || dir.Type() == fs.ModeSymlink
+	return dir.IsDir() || IsSymlink(dir)
 }
 
 func IsPathRegularDirOrSymlinkDir(path string) bool {
@@ -64,7 +68,9 @@ func RemoveID(name string) string {
 	ext := path.Ext(name)
 	name = strings.TrimSuffix(name, ext)
 	if 23 < len(name) {
-		name = name[:len(name)-23]
+		if id := name[len(name)-22:]; ast.IsNodeIDPattern(id) {
+			name = name[:len(name)-23]
+		}
 	}
 	return name + ext
 }

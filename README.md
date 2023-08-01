@@ -63,9 +63,6 @@ All local features are free, even for commercial use.
   * Standard Markdown with assets
   * PDF, Word and HTML
   * Copy to WeChat MP, Zhihu and Yuque
-* End-to-end encrypted data sync and backup via the third-party cloud storage services
-  * S3
-  * WebDAV
 * Spaced repetition
 * Multi-tab, drag and drop to split screen
 * Template snippet
@@ -73,14 +70,14 @@ All local features are free, even for commercial use.
 * Android/iOS APP
 * Docker deployment
 * [API](https://github.com/siyuan-note/siyuan/blob/master/API.md)
-* Community bazaar
+* Community marketplace
 
 ### Paid subscription
 
 Cloud services require a paid subscription.
 
 * VIP identity
-* End-to-end encrypted data sync and backup
+* End-to-end encrypted data sync and backup (including S3/WebDAV)
 * Cloud assets hosting
 
 ## 🏗️ Architecture design and open source ecosystem

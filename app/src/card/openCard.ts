@@ -6,7 +6,7 @@ import {Constants} from "../constants";
 import {disabledProtyle, onGet} from "../protyle/util/onGet";
 import {hasClosestByAttribute, hasClosestByClassName} from "../protyle/util/hasClosest";
 import {hideElements} from "../protyle/ui/hideElements";
-import {needSubscribe} from "../util/needSubscribe";
+import {needLogin, needSubscribe} from "../util/needSubscribe";
 import {fullscreen} from "../protyle/breadcrumb/action";
 import {MenuItem} from "../menus/Menu";
 import {escapeHtml} from "../util/escape";
@@ -349,7 +349,7 @@ export const bindCardEvent = (options: {
             }
             return;
         }
-        if (["0", "1", "2", "3", "-3"].includes(type) && actionElements[0].classList.contains("fn__none")) {
+        if (["1", "2", "3", "4", "-3"].includes(type) && actionElements[0].classList.contains("fn__none")) {
             fetchPost(type === "-3" ? "/api/riff/skipReviewRiffCard" : "/api/riff/reviewRiffCard", {
                 deckID: options.blocks[index].deckID,
                 cardID: options.blocks[index].cardID,
@@ -358,7 +358,8 @@ export const bindCardEvent = (options: {
             }, () => {
                 /// #if MOBILE
                 if (type !== "-3" &&
-                    (0 !== window.siyuan.config.sync.provider || (0 === window.siyuan.config.sync.provider && !needSubscribe(""))) &&
+                    ((0 !== window.siyuan.config.sync.provider && !needLogin("")) ||
+                        (0 === window.siyuan.config.sync.provider && !needSubscribe(""))) &&
                     window.siyuan.config.repo.key && window.siyuan.config.sync.enabled) {
                     document.getElementById("toolbarSync").classList.remove("fn__none");
                 }
