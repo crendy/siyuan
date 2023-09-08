@@ -123,7 +123,12 @@ export const goBack = () => {
         window.siyuan.menus.menu.element.dispatchEvent(new CustomEvent("click", {detail: "back"}));
         return;
     } else if (document.getElementById("model").style.transform === "translateY(0px)") {
-        document.getElementById("model").style.transform = "";
+        const searchAssetsPanelElement = document.getElementById("searchAssetsPanel");
+        if (!searchAssetsPanelElement || searchAssetsPanelElement.classList.contains("fn__none")) {
+            document.getElementById("model").style.transform = "";
+        } else {
+            searchAssetsPanelElement.classList.add("fn__none");
+        }
         return;
     } else if (window.siyuan.viewer && !window.siyuan.viewer.destroyed) {
         window.siyuan.viewer.destroy();

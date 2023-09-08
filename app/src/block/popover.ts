@@ -25,8 +25,12 @@ export const initBlockPopover = (app: App) => {
             if (hasClosestByAttribute(event.target, "data-type", "fold", true)) {
                 tip = window.siyuan.languages.fold;
             }
-            if (aElement.classList.contains("av__celltext") && aElement.scrollWidth > aElement.parentElement.clientWidth - 11) {
-                tip = aElement.textContent;
+            if (aElement.classList.contains("av__celltext")) {
+                if (aElement.scrollWidth > aElement.parentElement.clientWidth - 11) {
+                    tip = aElement.textContent;
+                } else {
+                    return;
+                }
             }
             if (!tip) {
                 tip = aElement.getAttribute("data-href");
@@ -50,6 +54,10 @@ export const initBlockPopover = (app: App) => {
             }, 200);
 
             if (!getTarget(event, aElement)) {
+                return;
+            }
+            // https://github.com/siyuan-note/siyuan/issues/9007
+            if (event.relatedTarget && !document.contains(event.relatedTarget as Node)) {
                 return;
             }
             if (window.siyuan.ctrlIsPressed) {

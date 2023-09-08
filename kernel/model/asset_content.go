@@ -21,14 +21,21 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+	"unicode/utf8"
 
 	"code.sajari.com/docconv"
+	"github.com/88250/epub"
 	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
 	"github.com/dustin/go-humanize"
+	"github.com/klippa-app/go-pdfium"
+	"github.com/klippa-app/go-pdfium/requests"
+	"github.com/klippa-app/go-pdfium/webassembly"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -72,6 +79,7 @@ func GetAssetContent(id, query string, queryMethod int) (ret *AssetContent) {
 		return
 	}
 	ret = results[0]
+	ret.Content = strings.ReplaceAll(ret.Content, "\n", "<br>")
 	return
 }
 
@@ -281,14 +289,20 @@ func buildAssetContentOrderBy(orderBy int) string {
 
 var assetContentSearcher = NewAssetsSearcher()
 
-func IndexAssetContent(absPath string) {
+func RemoveIndexAssetContent(absPath string) {
 	defer logging.Recover()
 
 	assetsDir := util.GetDataAssetsAbsPath()
+	p := "assets" + filepath.ToSlash(strings.TrimPrefix(absPath, assetsDir))
+	sql.DeleteAssetContentsByPathQueue(p)
+}
 
-	ext := strings.ToLower(filepath.Ext(absPath))
-	parser, found := assetContentSearcher.Parsers[ext]
-	if !found {
+func IndexAssetContent(absPath string) {
+	defer logging.Recover()
+
+	ext := filepath.Ext(absPath)
+	parser := assetContentSearcher.GetParser(ext)
+	if nil == parser {
 		return
 	}
 
@@ -303,6 +317,7 @@ func IndexAssetContent(absPath string) {
 		return
 	}
 
+	assetsDir := util.GetDataAssetsAbsPath()
 	p := "assets" + filepath.ToSlash(strings.TrimPrefix(absPath, assetsDir))
 
 	assetContents := []*sql.AssetContent{
@@ -349,9 +364,15 @@ var (
 )
 
 type AssetsSearcher struct {
-	Parsers map[string]AssetParser
+	parsers map[string]AssetParser
+	lock    *sync.Mutex
+}
 
-	lock *sync.Mutex
+func (searcher *AssetsSearcher) GetParser(ext string) AssetParser {
+	searcher.lock.Lock()
+	defer searcher.lock.Unlock()
+
+	return searcher.parsers[strings.ToLower(ext)]
 }
 
 func (searcher *AssetsSearcher) FullIndex() {
@@ -373,11 +394,13 @@ func (searcher *AssetsSearcher) FullIndex() {
 			return nil
 		}
 
-		ext := strings.ToLower(filepath.Ext(absPath))
-		parser, found := searcher.Parsers[ext]
-		if !found {
+		ext := filepath.Ext(absPath)
+		parser := searcher.GetParser(ext)
+		if nil == parser {
 			return nil
 		}
+
+		logging.LogInfof("parsing asset content [%s]", absPath)
 
 		result := parser.Parse(absPath)
 		if nil == result {
@@ -408,19 +431,56 @@ func (searcher *AssetsSearcher) FullIndex() {
 }
 
 func NewAssetsSearcher() *AssetsSearcher {
+	txtAssetParser := &TxtAssetParser{}
 	return &AssetsSearcher{
-		Parsers: map[string]AssetParser{
-			".txt":      &TxtAssetParser{},
-			".md":       &TxtAssetParser{},
-			".markdown": &TxtAssetParser{},
+		parsers: map[string]AssetParser{
+			".txt":      txtAssetParser,
+			".md":       txtAssetParser,
+			".markdown": txtAssetParser,
+			".json":     txtAssetParser,
+			".log":      txtAssetParser,
+			".sql":      txtAssetParser,
+			".html":     txtAssetParser,
+			".xml":      txtAssetParser,
+			".java":     txtAssetParser,
+			".h":        txtAssetParser,
+			".c":        txtAssetParser,
+			".cpp":      txtAssetParser,
+			".go":       txtAssetParser,
+			".rs":       txtAssetParser,
+			".swift":    txtAssetParser,
+			".kt":       txtAssetParser,
+			".py":       txtAssetParser,
+			".php":      txtAssetParser,
+			".js":       txtAssetParser,
+			".css":      txtAssetParser,
+			".ts":       txtAssetParser,
+			".sh":       txtAssetParser,
+			".bat":      txtAssetParser,
+			".cmd":      txtAssetParser,
+			".ini":      txtAssetParser,
+			".yaml":     txtAssetParser,
+			".rst":      txtAssetParser,
+			".adoc":     txtAssetParser,
+			".textile":  txtAssetParser,
+			".opml":     txtAssetParser,
+			".org":      txtAssetParser,
+			".wiki":     txtAssetParser,
 			".docx":     &DocxAssetParser{},
 			".pptx":     &PptxAssetParser{},
 			".xlsx":     &XlsxAssetParser{},
+			".pdf":      &PdfAssetParser{},
+			".epub":     &EpubAssetParser{},
 		},
 
 		lock: &sync.Mutex{},
 	}
 }
+
+const (
+	TxtAssetContentMaxSize = 1024 * 1024 * 4
+	PDFAssetContentMaxPage = 1024
+)
 
 type AssetParseResult struct {
 	Path    string
@@ -437,24 +497,43 @@ type TxtAssetParser struct {
 }
 
 func (parser *TxtAssetParser) Parse(absPath string) (ret *AssetParseResult) {
-	if !strings.HasSuffix(strings.ToLower(absPath), ".txt") {
+	info, err := os.Stat(absPath)
+	if nil != err {
+		logging.LogErrorf("stat file [%s] failed: %s", absPath, err)
 		return
 	}
 
-	data, err := filelock.ReadFile(absPath)
+	if TxtAssetContentMaxSize < info.Size() {
+		logging.LogWarnf("text asset [%s] is too large [%s]", absPath, humanize.Bytes(uint64(info.Size())))
+		return
+	}
+
+	tmp := copyTempAsset(absPath)
+	if "" == tmp {
+		return
+	}
+	defer os.RemoveAll(tmp)
+
+	data, err := os.ReadFile(tmp)
 	if nil != err {
 		logging.LogErrorf("read file [%s] failed: %s", absPath, err)
 		return
 	}
 
-	content := normalizeAssetContent(string(data))
+	if !utf8.Valid(data) {
+		// Non-UTF-8 encoded text files are not included in asset file content searching https://github.com/siyuan-note/siyuan/issues/9052
+		logging.LogWarnf("text asset [%s] is not UTF-8 encoded", absPath)
+		return
+	}
+
+	content := string(data)
 	ret = &AssetParseResult{
 		Content: content,
 	}
 	return
 }
 
-func normalizeAssetContent(content string) (ret string) {
+func normalizeNonTxtAssetContent(content string) (ret string) {
 	ret = strings.Join(strings.Fields(content), " ")
 	return
 }
@@ -474,7 +553,8 @@ func copyTempAsset(absPath string) (ret string) {
 	filelock.RWLock.Lock()
 	defer filelock.RWLock.Unlock()
 
-	ret = filepath.Join(dir, gulu.Rand.String(7)+".docx")
+	ext := filepath.Ext(absPath)
+	ret = filepath.Join(dir, gulu.Rand.String(7)+ext)
 	if err := gulu.File.Copy(absPath, ret); nil != err {
 		logging.LogErrorf("copy [src=%s, dest=%s] failed: %s", absPath, ret, err)
 		return
@@ -513,7 +593,7 @@ func (parser *DocxAssetParser) Parse(absPath string) (ret *AssetParseResult) {
 		return
 	}
 
-	var content = normalizeAssetContent(data)
+	var content = normalizeNonTxtAssetContent(data)
 	ret = &AssetParseResult{
 		Content: content,
 	}
@@ -551,7 +631,7 @@ func (parser *PptxAssetParser) Parse(absPath string) (ret *AssetParseResult) {
 		return
 	}
 
-	var content = normalizeAssetContent(data)
+	var content = normalizeNonTxtAssetContent(data)
 	ret = &AssetParseResult{
 		Content: content,
 	}
@@ -598,7 +678,239 @@ func (parser *XlsxAssetParser) Parse(absPath string) (ret *AssetParseResult) {
 		}
 	}
 
-	var content = normalizeAssetContent(buf.String())
+	var content = normalizeNonTxtAssetContent(buf.String())
+	ret = &AssetParseResult{
+		Content: content,
+	}
+	return
+}
+
+// PdfAssetParser parser factory product
+type PdfAssetParser struct {
+}
+
+// pdfPage struct defines a worker job for text extraction
+type pdfPage struct {
+	pageNo int     // page number for text extraction
+	data   *[]byte // pointer to PDF document data
+}
+
+// pdfTextResult struct defines the extracted PDF text result
+type pdfTextResult struct {
+	pageNo int    // page number of PDF document
+	text   string // text of converted page
+	err    error  // processing error
+}
+
+// getTextPageWorker will extract the text from a given PDF page and return its result
+func (parser *PdfAssetParser) getTextPageWorker(id int, instance pdfium.Pdfium, page <-chan *pdfPage, result chan<- *pdfTextResult) {
+	defer instance.Close()
+	for pd := range page {
+		doc, err := instance.OpenDocument(&requests.OpenDocument{
+			File: pd.data,
+		})
+		if nil != err {
+			instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
+				Document: doc.Document,
+			})
+			result <- &pdfTextResult{
+				pageNo: pd.pageNo,
+				err:    err,
+			}
+			continue
+		}
+
+		req := &requests.GetPageText{
+			Page: requests.Page{
+				ByIndex: &requests.PageByIndex{
+					Document: doc.Document,
+					Index:    pd.pageNo,
+				},
+			},
+		}
+		res, err := instance.GetPageText(req)
+		if nil != err {
+			instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
+				Document: doc.Document,
+			})
+			result <- &pdfTextResult{
+				pageNo: pd.pageNo,
+				err:    err,
+			}
+			continue
+		}
+		instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
+			Document: doc.Document,
+		})
+		result <- &pdfTextResult{
+			pageNo: pd.pageNo,
+			text:   res.Text,
+			err:    nil,
+		}
+	}
+}
+
+// Parse will parse a PDF document using PDFium webassembly module using a worker pool
+func (parser *PdfAssetParser) Parse(absPath string) (ret *AssetParseResult) {
+	if util.ContainerIOS == util.Container || util.ContainerAndroid == util.Container {
+		// PDF asset content searching is not supported on mobile platforms
+		return
+	}
+
+	now := time.Now()
+	if !strings.HasSuffix(strings.ToLower(absPath), ".pdf") {
+		return
+	}
+
+	if !gulu.File.IsExist(absPath) {
+		return
+	}
+
+	tmp := copyTempAsset(absPath)
+	if "" == tmp {
+		return
+	}
+	defer os.RemoveAll(tmp)
+
+	// PDF blob will be processed in-memory making sharing of PDF document data across worker goroutines possible
+	pdfData, err := os.ReadFile(tmp)
+	if nil != err {
+		logging.LogErrorf("open [%s] failed: [%s]", tmp, err)
+		return
+	}
+
+	// initialize go-pdfium with number of available cores
+	// we fire up the complete worker pool for maximum performance
+	cores := runtime.NumCPU()
+	if 4 < cores {
+		cores = 4 // Limit memory usage
+	}
+
+	pool, err := webassembly.Init(webassembly.Config{
+		MinIdle:  cores,
+		MaxIdle:  cores,
+		MaxTotal: cores,
+	})
+	if nil != err {
+		logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+		return
+	}
+	defer pool.Close()
+
+	// first get the number of PDF pages to convert into text
+	instance, err := pool.GetInstance(time.Second * 30)
+	if nil != err {
+		logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+		return
+	}
+	doc, err := instance.OpenDocument(&requests.OpenDocument{
+		File: &pdfData,
+	})
+	if nil != err {
+		instance.Close()
+		logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+		return
+	}
+	pc, err := instance.FPDF_GetPageCount(&requests.FPDF_GetPageCount{Document: doc.Document})
+	if nil != err {
+		instance.FPDF_CloseDocument(&requests.FPDF_CloseDocument{
+			Document: doc.Document,
+		})
+		instance.Close()
+		logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+		return
+	}
+	instance.Close()
+
+	if PDFAssetContentMaxPage < pc.PageCount {
+		// PDF files longer than 1024 pages are not included in asset file content searching https://github.com/siyuan-note/siyuan/issues/9053
+		logging.LogWarnf("ignore large PDF asset [%s] with [%d] pages", absPath, pc.PageCount)
+		return
+	}
+
+	// next setup worker pool for processing PDF pages
+	pages := make(chan *pdfPage, pc.PageCount)
+	results := make(chan *pdfTextResult, pc.PageCount)
+	for i := 0; i < cores; i++ {
+		inst, err := pool.GetInstance(time.Second * 30)
+		if nil != err {
+			close(pages)
+			close(results)
+			logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+			return
+		}
+		go parser.getTextPageWorker(i, inst, pages, results)
+	}
+
+	// now split pages and let them process by worker pool
+	for p := 0; p < pc.PageCount; p++ {
+		pages <- &pdfPage{
+			pageNo: p,
+			data:   &pdfData,
+		}
+	}
+	close(pages)
+
+	// finally fetch the PDF page text results
+	// Note: some workers will process pages faster than other workers depending on the page contents
+	// the order of returned PDF text pages is random and must be sorted using the pageNo index
+	pageText := make([]string, pc.PageCount)
+	for p := 0; p < pc.PageCount; p++ {
+		res := <-results
+		pageText[res.pageNo] = res.text
+		if nil != res.err {
+			logging.LogErrorf("convert [%s] of page %d failed: [%s]", tmp, res.pageNo, err)
+		}
+	}
+	close(results)
+
+	if 128 < pc.PageCount {
+		logging.LogInfof("convert [%s] PDF with [%d] pages using [%d] workers took [%s]", absPath, pc.PageCount, cores, time.Since(now))
+	}
+
+	// loop through ordered PDF text pages and join content for asset parse DB result
+	contentBuilder := bytes.Buffer{}
+	for _, pt := range pageText {
+		contentBuilder.WriteString(" " + normalizeNonTxtAssetContent(pt))
+	}
+	ret = &AssetParseResult{
+		Content: contentBuilder.String(),
+	}
+	return
+}
+
+type EpubAssetParser struct {
+}
+
+func (parser *EpubAssetParser) Parse(absPath string) (ret *AssetParseResult) {
+	if !strings.HasSuffix(strings.ToLower(absPath), ".epub") {
+		return
+	}
+
+	if !gulu.File.IsExist(absPath) {
+		return
+	}
+
+	tmp := copyTempAsset(absPath)
+	if "" == tmp {
+		return
+	}
+	defer os.RemoveAll(tmp)
+
+	f, err := os.Open(tmp)
+	if nil != err {
+		logging.LogErrorf("open [%s] failed: [%s]", tmp, err)
+		return
+	}
+	defer f.Close()
+
+	buf := bytes.Buffer{}
+	if err = epub.ToTxt(tmp, &buf); nil != err {
+		logging.LogErrorf("convert [%s] failed: [%s]", tmp, err)
+		return
+	}
+
+	content := normalizeNonTxtAssetContent(buf.String())
 	ret = &AssetParseResult{
 		Content: content,
 	}

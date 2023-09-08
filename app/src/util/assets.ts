@@ -7,6 +7,7 @@ import {exportLayout} from "../layout/util";
 /// #endif
 import {fetchPost} from "./fetch";
 import {appearance} from "../config/appearance";
+import {isInAndroid, isInIOS} from "../protyle/util/compatibility";
 
 const loadThirdIcon = (iconURL: string, data: IAppearance) => {
     addScript(iconURL, "iconDefaultScript").then(() => {
@@ -173,6 +174,7 @@ export const addGA = () => {
             subscriptionStatus: -1,
             subscriptionPlan: -1,
             subscriptionType: -1,
+            oneTimePayStatus: -1,
             syncEnabled: false,
             syncProvider: -1,
             cTreeCount: window.siyuan.config.stat.cTreeCount,
@@ -185,6 +187,7 @@ export const addGA = () => {
             para.subscriptionStatus = window.siyuan.user.userSiYuanSubscriptionStatus;
             para.subscriptionPlan = window.siyuan.user.userSiYuanSubscriptionPlan;
             para.subscriptionType = window.siyuan.user.userSiYuanSubscriptionType;
+            para.oneTimePayStatus = window.siyuan.user.userSiYuanOneTimePayStatus;
         }
         if (window.siyuan.config.sync) {
             para.syncEnabled = window.siyuan.config.sync.enabled;
@@ -287,8 +290,7 @@ export const setMode = (modeElementValue: number) => {
 };
 
 const updateMobileTheme = (OSTheme: string) => {
-    if ((window.siyuan.config.system.container === "ios" && window.webkit?.messageHandlers) ||
-        (window.siyuan.config.system.container === "android" && window.JSAndroid)) {
+    if (isInIOS() || isInAndroid()) {
         setTimeout(() => {
             const backgroundColor = getComputedStyle(document.body).getPropertyValue("--b3-theme-background").trim();
             let mode = window.siyuan.config.appearance.mode;
@@ -299,9 +301,9 @@ const updateMobileTheme = (OSTheme: string) => {
                     mode = 0;
                 }
             }
-            if (window.siyuan.config.system.container === "ios" && window.webkit?.messageHandlers) {
+            if (isInIOS()) {
                 window.webkit.messageHandlers.changeStatusBar.postMessage((backgroundColor || (mode === 0 ? "#fff" : "#1e1e1e")) + " " + mode);
-            } else if (window.siyuan.config.system.container === "android" && window.JSAndroid) {
+            } else if (isInAndroid()) {
                 window.JSAndroid.changeStatusBarColor(backgroundColor, mode);
             }
         }, 500); // 移动端需要加载完才可以获取到颜色

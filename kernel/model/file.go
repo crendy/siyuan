@@ -66,6 +66,7 @@ type File struct {
 	HCtime       string `json:"hCtime"`
 	Sort         int    `json:"sort"`
 	SubFileCount int    `json:"subFileCount"`
+	Hidden       bool   `json:"hidden"`
 
 	NewFlashcardCount int `json:"newFlashcardCount"`
 	DueFlashcardCount int `json:"dueFlashcardCount"`
@@ -231,7 +232,7 @@ type FileInfo struct {
 	isdir bool
 }
 
-func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount int) (ret []*File, totals int, err error) {
+func ListDocTree(boxID, listPath string, sortMode int, flashcard, showHidden bool, maxListCount int) (ret []*File, totals int, err error) {
 	//os.MkdirAll("pprof", 0755)
 	//cpuProfile, _ := os.Create("pprof/cpu_profile_list_doc_tree")
 	//pprof.StartCPUProfile(cpuProfile)
@@ -266,7 +267,7 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 
 	var files []*FileInfo
 	start := time.Now()
-	files, totals, err = box.Ls(path)
+	files, totals, err = box.Ls(listPath)
 	if nil != err {
 		return
 	}
@@ -285,15 +286,24 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 			}
 
 			parentDocPath := strings.TrimSuffix(file.path, "/") + ".sy"
-			subDocFile := box.Stat(parentDocPath)
-			if nil == subDocFile {
+			parentDocFile := box.Stat(parentDocPath)
+			if nil == parentDocFile {
 				continue
 			}
 			if ial := box.docIAL(parentDocPath); nil != ial {
-				doc := box.docFromFileInfo(subDocFile, ial)
+				if !showHidden && "true" == ial["custom-hidden"] {
+					continue
+				}
+
+				doc := box.docFromFileInfo(parentDocFile, ial)
 				subFiles, err := os.ReadDir(filepath.Join(boxLocalPath, file.path))
 				if nil == err {
 					for _, subFile := range subFiles {
+						subDocFilePath := path.Join(file.path, subFile.Name())
+						if subIAL := box.docIAL(subDocFilePath); "true" == subIAL["custom-hidden"] {
+							continue
+						}
+
 						if strings.HasSuffix(subFile.Name(), ".sy") {
 							doc.SubFileCount++
 						}
@@ -313,6 +323,7 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 					docs = append(docs, doc)
 				}
 			}
+
 			continue
 		}
 
@@ -322,6 +333,10 @@ func ListDocTree(boxID, path string, sortMode int, flashcard bool, maxListCount 
 		}
 
 		if ial := box.docIAL(file.path); nil != ial {
+			if !showHidden && "true" == ial["custom-hidden"] {
+				continue
+			}
+
 			doc := box.docFromFileInfo(file, ial)
 
 			if flashcard {
@@ -516,8 +531,12 @@ func GetDoc(startID, endID, id string, index int, query string, queryTypes map[s
 	luteEngine := NewLute()
 	node := treenode.GetNodeInTree(tree, id)
 	if nil == node {
-		err = ErrBlockNotFound
-		return
+		// Unable to open the doc when the block pointed by the scroll position does not exist https://github.com/siyuan-note/siyuan/issues/9030
+		node = treenode.GetNodeInTree(tree, tree.Root.ID)
+		if nil == node {
+			err = ErrBlockNotFound
+			return
+		}
 	}
 
 	if isBacklink { // 引用计数浮窗请求，需要按照反链逻辑组装 https://github.com/siyuan-note/siyuan/issues/6853
@@ -988,7 +1007,7 @@ func CreateDocByMd(boxID, p, title, md string, sorts []string) (tree *parse.Tree
 
 	luteEngine := util.NewLute()
 	dom := luteEngine.Md2BlockDOM(md, false)
-	tree, err = createDoc(box.ID, p, title, dom)
+	tree, err = createDoc(box.ID, p, title, dom, true)
 	if nil != err {
 		return
 	}
@@ -997,7 +1016,7 @@ func CreateDocByMd(boxID, p, title, md string, sorts []string) (tree *parse.Tree
 	return
 }
 
-func CreateWithMarkdown(boxID, hPath, md, parentID string) (id string, err error) {
+func CreateWithMarkdown(boxID, hPath, md, parentID string, hidden bool) (id string, err error) {
 	box := Conf.Box(boxID)
 	if nil == box {
 		err = errors.New(Conf.Language(0))
@@ -1007,7 +1026,7 @@ func CreateWithMarkdown(boxID, hPath, md, parentID string) (id string, err error
 	WaitForWritingFiles()
 	luteEngine := util.NewLute()
 	dom := luteEngine.Md2BlockDOM(md, false)
-	id, _, err = createDocsByHPath(box.ID, hPath, dom, parentID)
+	id, _, err = createDocsByHPath(box.ID, hPath, dom, parentID, hidden)
 	return
 }
 
@@ -1410,7 +1429,7 @@ func CreateDailyNote(boxID string) (p string, existed bool, err error) {
 		return
 	}
 
-	id, existed, err := createDocsByHPath(box.ID, hPath, "", "")
+	id, existed, err := createDocsByHPath(box.ID, hPath, "", "", true)
 	if nil != err {
 		return
 	}
@@ -1455,7 +1474,7 @@ func CreateDailyNote(boxID string) (p string, existed bool, err error) {
 	return
 }
 
-func createDoc(boxID, p, title, dom string) (tree *parse.Tree, err error) {
+func createDoc(boxID, p, title, dom string, hidden bool) (tree *parse.Tree, err error) {
 	title = gulu.Str.RemoveInvisible(title)
 	if 512 < utf8.RuneCountInString(title) {
 		// 限制笔记本名和文档名最大长度为 `512` https://github.com/siyuan-note/siyuan/issues/6299
@@ -1525,6 +1544,10 @@ func createDoc(boxID, p, title, dom string) (tree *parse.Tree, err error) {
 	tree.Root.KramdownIAL = [][]string{{"id", id}, {"title", html.EscapeAttrVal(title)}, {"updated", updated}}
 	if nil == tree.Root.FirstChild {
 		tree.Root.AppendChild(treenode.NewParagraph())
+	}
+
+	if !hidden {
+		tree.Root.SetIALAttr("custom-hidden", "true")
 	}
 
 	transaction := &Transaction{DoOperations: []*Operation{{Action: "create", Data: tree}}}

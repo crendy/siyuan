@@ -5,7 +5,6 @@
   border: 1px solid var(--b3-theme-surface-lighter);
   background-color: var(--b3-menu-background);
   padding: 8px 0;
-  z-index: 210;
   box-sizing: border-box;
 
   &::-webkit-scrollbar,
@@ -43,14 +42,14 @@
 
     .b3-menu {
       &__submenu {
-        top: 48.5px;
+        top: 49.5px;
         left: 0;
         bottom: 0;
         max-height: none;
         right: 0;
         box-shadow: none;
         border: 0;
-        padding: 24px 0;
+        padding: 0;
         border-radius: 0;
 
         & > .b3-menu__item:first-child {
@@ -168,7 +167,10 @@
 
     &[disabled="disabled"] {
       cursor: not-allowed;
-      opacity: 0.38;
+
+      & > *:not(.b3-menu__submenu) {
+        opacity: 0.38;
+      }
     }
 
     &--show {
@@ -284,7 +286,7 @@
     border: 1px solid var(--b3-theme-surface-lighter);
     border-radius: var(--b3-border-radius-b);
     background-color: var(--b3-menu-background);
-    padding: 8px;
+    padding: 8px 0;
     position: fixed;
     box-shadow: var(--b3-dialog-shadow);
     z-index: 1;

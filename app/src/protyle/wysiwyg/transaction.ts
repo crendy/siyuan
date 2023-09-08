@@ -6,7 +6,7 @@ import {blockRender} from "../render/blockRender";
 import {processRender} from "../util/processCode";
 import {highlightRender} from "../render/highlightRender";
 import {hasClosestBlock, hasClosestByAttribute} from "../util/hasClosest";
-import {setFold} from "../../menus/protyle";
+import {setFold, zoomOut} from "../../menus/protyle";
 import {onGet} from "../util/onGet";
 /// #if !MOBILE
 import {getAllModels} from "../../layout/getAll";
@@ -317,8 +317,56 @@ const updateEmbed = (protyle: IProtyle, operation: IOperation) => {
     }
 };
 
+const deleteBlock = (updateElements: Element[], id: string, protyle: IProtyle, isUndo: boolean) => {
+    if (isUndo) {
+        focusSideBlock(updateElements[0]);
+    }
+    updateElements.forEach(item => {
+        item.remove();
+    });
+    // 更新 ws 嵌入块
+    protyle.wysiwyg.element.querySelectorAll('[data-type="NodeBlockQueryEmbed"]').forEach((item) => {
+        if (item.querySelector(`[data-node-id="${id}"]`)) {
+            item.removeAttribute("data-render");
+            blockRender(protyle, item);
+        }
+    });
+};
+
+const updateBlock = (updateElements: Element[], protyle: IProtyle, operation: IOperation, isUndo: boolean) => {
+    updateElements.forEach(item => {
+        item.outerHTML = operation.data;
+    });
+    Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).find(item => {
+        if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" // 引用转换为块嵌入，undo、redo 后也需要更新 updateElement
+            || !hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
+            updateElements[0] = item;
+            return true;
+        }
+    });
+    const wbrElement = updateElements[0].querySelector("wbr");
+    if (isUndo) {
+        const range = getEditorRange(updateElements[0]);
+        if (wbrElement) {
+            focusByWbr(updateElements[0], range);
+        } else {
+            focusBlock(updateElements[0]);
+        }
+    } else if (wbrElement) {
+        wbrElement.remove();
+    }
+    processRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
+    highlightRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
+    avRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
+    blockRender(protyle, updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
+    // 更新 ws 嵌入块
+    updateEmbed(protyle, operation);
+    // 更新 ws 引用块
+    updateRef(protyle, operation.id);
+};
+
 // 用于推送和撤销
-export const onTransaction = (protyle: IProtyle, operation: IOperation, focus: boolean) => {
+export const onTransaction = (protyle: IProtyle, operation: IOperation, isUndo: boolean) => {
     const updateElements: Element[] = [];
     Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
         if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
@@ -375,54 +423,44 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, focus: b
     }
     if (operation.action === "delete") {
         if (updateElements.length > 0) {
-            if (focus) {
-                focusSideBlock(updateElements[0]);
-            }
-            updateElements.forEach(item => {
-                item.remove();
+            deleteBlock(updateElements, operation.id, protyle, isUndo);
+        } else if (isUndo){
+            zoomOut({
+                protyle,
+                id: protyle.block.rootID,
+                isPushBack: false,
+                focusId: operation.id,
+                callback() {
+                    Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
+                        if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                            updateElements.push(item);
+                        }
+                    });
+                    deleteBlock(updateElements, operation.id, protyle, isUndo);
+                }
             });
         }
-        // 更新 ws 嵌入块
-        protyle.wysiwyg.element.querySelectorAll('[data-type="NodeBlockQueryEmbed"]').forEach((item) => {
-            if (item.querySelector(`[data-node-id="${operation.id}"]`)) {
-                item.removeAttribute("data-render");
-                blockRender(protyle, item);
-            }
-        });
         return;
     }
     if (operation.action === "update") {
         if (updateElements.length > 0) {
-            updateElements.forEach(item => {
-                item.outerHTML = operation.data;
-            });
-            Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).find(item => {
-                if (item.getAttribute("data-type") === "NodeBlockQueryEmbed" // 引用转换为块嵌入，undo、redo 后也需要更新 updateElement
-                    || !hasClosestByAttribute(item, "data-type", "NodeBlockQueryEmbed")) {
-                    updateElements[0] = item;
-                    return true;
+            updateBlock(updateElements, protyle, operation, isUndo);
+        } else if (isUndo) {
+            zoomOut({
+                protyle,
+                id: protyle.block.rootID,
+                isPushBack: false,
+                focusId: operation.id,
+                callback() {
+                    Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).forEach(item => {
+                        if (!hasClosestByAttribute(item.parentElement, "data-type", "NodeBlockQueryEmbed")) {
+                            updateElements.push(item);
+                        }
+                    });
+                    updateBlock(updateElements, protyle, operation, isUndo);
                 }
             });
-            const wbrElement = updateElements[0].querySelector("wbr");
-            if (focus) {
-                const range = getEditorRange(updateElements[0]);
-                if (wbrElement) {
-                    focusByWbr(updateElements[0], range);
-                } else {
-                    focusBlock(updateElements[0]);
-                }
-            } else if (wbrElement) {
-                wbrElement.remove();
-            }
-            processRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
-            highlightRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
-            avRender(updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
-            blockRender(protyle, updateElements.length === 1 ? updateElements[0] : protyle.wysiwyg.element);
         }
-        // 更新 ws 嵌入块
-        updateEmbed(protyle, operation);
-        // 更新 ws 引用块
-        updateRef(protyle, operation.id);
         return;
     }
     if (operation.action === "updateAttrs") { // 调用接口才推送
@@ -510,7 +548,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, focus: b
     }
     if (operation.action === "move") {
         let range;
-        if (focus && getSelection().rangeCount > 0) {
+        if (isUndo && getSelection().rangeCount > 0) {
             range = getSelection().getRangeAt(0);
             range.insertNode(document.createElement("wbr"));
         }
@@ -567,7 +605,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, focus: b
                 removeTopElement(item, protyle);
             }
         });
-        if (focus && range) {
+        if (isUndo && range) {
             if (operation.data === "focus") {
                 // 标记需要 focus，https://ld246.com/article/1650018446988/comment/1650081404993?r=Vanessa#comments
                 Array.from(protyle.wysiwyg.element.querySelectorAll(`[data-node-id="${operation.id}"]`)).find(item => {
@@ -637,7 +675,7 @@ export const onTransaction = (protyle: IProtyle, operation: IOperation, focus: b
             avRender(item);
             blockRender(protyle, item);
             const wbrElement = item.querySelector("wbr");
-            if (focus) {
+            if (isUndo) {
                 const range = getEditorRange(item);
                 if (wbrElement) {
                     focusByWbr(item, range);

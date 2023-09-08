@@ -27,7 +27,7 @@ export class Dialog {
         this.destroyCallback = options.destroyCallback;
         this.element = document.createElement("div") as HTMLElement;
 
-        this.element.innerHTML = `<div class="b3-dialog">
+        this.element.innerHTML = `<div class="b3-dialog" style="z-index: ${++window.siyuan.zIndex};">
 <div class="b3-dialog__scrim"${options.transparent ? 'style="background-color:transparent"' : ""}></div>
 <div class="b3-dialog__container" style="width:${options.width || "auto"};height:${options.height || "auto"}">
   <svg ${(isMobile() && options.title) ? 'style="top:0;right:0;"' : ""} class="b3-dialog__close${this.disableClose ? " fn__none" : ""}"><use xlink:href="#iconCloseRound"></use></svg>
@@ -87,15 +87,25 @@ export class Dialog {
                 event.preventDefault();
                 return;
             }
+            const confirmElement = document.querySelector("#confirmDialogConfirmBtn");
             if (event.key === "Escape") {
-                this.destroy();
+                if (confirmElement) {
+                    confirmElement.previousElementSibling.previousElementSibling.dispatchEvent(new CustomEvent("click"));
+                } else {
+                    this.destroy();
+                }
                 event.preventDefault();
                 event.stopPropagation();
                 return;
             }
             if (!event.shiftKey && !isCtrl(event) && event.key === "Enter" && enterEvent) {
-                enterEvent();
+                if (confirmElement) {
+                    confirmElement.dispatchEvent(new CustomEvent("click"));
+                } else {
+                    enterEvent();
+                }
                 event.preventDefault();
+                event.stopPropagation();
             }
         });
     }

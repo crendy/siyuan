@@ -12,7 +12,6 @@ import {MenuItem} from "../menus/Menu";
 import {escapeHtml} from "../util/escape";
 /// #if !MOBILE
 import {openFile} from "../editor/util";
-import {newCardModel} from "./newCardTab";
 /// #endif
 import {getDisplayName, movePathTo} from "../util/pathName";
 import {App} from "../index";
@@ -150,7 +149,6 @@ export const bindCardEvent = (options: {
             });
         });
     }
-    (options.element.firstElementChild as HTMLElement).style.zIndex = "200";
     options.element.setAttribute("data-key", window.siyuan.config.keymap.general.riffCard.custom);
     const countElement = options.element.querySelector('[data-type="count"]');
     const actionElements = options.element.querySelectorAll(".card__action");
@@ -221,7 +219,7 @@ export const bindCardEvent = (options: {
                             id: filterElement.getAttribute("data-id"),
                             title: options.title
                         },
-                        fn: newCardModel
+                        id: "siyuan-card"
                     },
                 });
                 if (options.dialog) {
