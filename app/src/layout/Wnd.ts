@@ -36,6 +36,7 @@ import {focusByOffset, getSelectionOffset} from "../protyle/util/selection";
 import {Custom} from "./dock/Custom";
 import {App} from "../index";
 import {unicode2Emoji} from "../emoji";
+import {closeWindow} from "../window/closeWin";
 
 export class Wnd {
     private app: App;
@@ -61,9 +62,9 @@ export class Wnd {
         <ul class="fn__flex layout-tab-bar"></ul>
         <ul class="layout-tab-bar layout-tab-bar--readonly fn__flex-1">
             <li class="item item--readonly">
-                <span data-type="new" class="block__icon block__icon--show" title="${window.siyuan.languages.newFile}"><svg><use xlink:href="#iconAdd"></use></svg></span>
+                <span data-type="new" class="block__icon block__icon--show ariaLabel" aria-label="${window.siyuan.languages.newFile}"><svg><use xlink:href="#iconAdd"></use></svg></span>
                 <span class="fn__flex-1"></span>
-                <span data-type="more" data-menu="true" class="block__icon block__icon--show" title="${window.siyuan.languages.more}"><svg><use xlink:href="#iconDown"></use></svg></span>
+                <span data-type="more" data-menu="true" class="block__icon block__icon--show ariaLabel" aria-label="${window.siyuan.languages.switchTab}"><svg><use xlink:href="#iconDown"></use></svg></span>
             </li>
         </ul>
     </div>
@@ -409,7 +410,7 @@ export class Wnd {
         }
     }
 
-    public switchTab(target: HTMLElement, pushBack = false, update = true) {
+    public switchTab(target: HTMLElement, pushBack = false, update = true, resize = true) {
         setPanelFocus(this.headersElement.parentElement.parentElement);
         let currentTab: Tab;
         this.children.forEach((item) => {
@@ -473,7 +474,7 @@ export class Wnd {
                     openFileById({
                         app: this.app,
                         id: keepCursorId,
-                        action: [Constants.CB_GET_FOCUS, Constants.CB_GET_CONTEXT]
+                        action: [Constants.CB_GET_FOCUS, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL]
                     });
                 }
                 currentTab.headElement.removeAttribute("keep-cursor");
@@ -485,7 +486,7 @@ export class Wnd {
                     focus: true,
                     pushBackStack: pushBack,
                     reload: false,
-                    resize: true,
+                    resize,
                 });
             }
         } else {
@@ -494,7 +495,7 @@ export class Wnd {
                 focus: false,
                 pushBackStack: false,
                 reload: false,
-                resize: true,
+                resize,
             });
         }
     }
@@ -750,7 +751,7 @@ export class Wnd {
                             }
                         });
                         if (latestHeadElement && !closeAll) {
-                            this.switchTab(latestHeadElement, true);
+                            this.switchTab(latestHeadElement, true, true, false);
                         }
                     }
                     if (animate) {
@@ -775,7 +776,7 @@ export class Wnd {
             if (!wnd) {
                 /// #if !BROWSER
                 if (isWindow()) {
-                    getCurrentWindow().destroy();
+                    closeWindow(this.app);
                     return;
                 }
                 /// #endif

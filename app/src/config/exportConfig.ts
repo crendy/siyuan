@@ -1,12 +1,12 @@
 import {fetchPost} from "../util/fetch";
 /// #if !BROWSER
 import {dialog} from "@electron/remote";
-import {shell} from "electron";
 import {afterExport} from "../protyle/export/util";
 import * as path from "path";
 /// #endif
 import {isBrowser} from "../util/functions";
 import {showMessage} from "../dialog/message";
+import {showFileInFolder} from "../util/pathName";
 
 export const exportConfig = {
     element: undefined as Element,
@@ -78,6 +78,13 @@ export const exportConfig = {
 </label>
 <label class="fn__flex b3-label config__item">
     <div class="fn__flex-1">
+        ${window.siyuan.languages.export25}
+        <div class="b3-label__text">${window.siyuan.languages.export26}</div>
+    </div>
+    <input class="b3-text-field fn__flex-center fn__size200" id="docxTemplate" placeholder="F:\\template.docx">
+</label>
+<label class="fn__flex b3-label config__item">
+    <div class="fn__flex-1">
         ${window.siyuan.languages.export13}
         <div class="b3-label__text">${window.siyuan.languages.export14}</div>
     </div>
@@ -127,6 +134,7 @@ export const exportConfig = {
 </label>`;
     },
     bindEvent: () => {
+        (exportConfig.element.querySelector("#docxTemplate") as HTMLInputElement).value = window.siyuan.config.export.docxTemplate;
         (exportConfig.element.querySelector("#pdfFooter") as HTMLInputElement).value = window.siyuan.config.export.pdfFooter;
         (exportConfig.element.querySelector("#blockRefTextLeft") as HTMLInputElement).value = window.siyuan.config.export.blockRefTextLeft;
         (exportConfig.element.querySelector("#blockRefTextRight") as HTMLInputElement).value = window.siyuan.config.export.blockRefTextRight;
@@ -142,6 +150,7 @@ export const exportConfig = {
                 blockEmbedMode: parseInt((exportConfig.element.querySelector("#blockEmbedMode") as HTMLSelectElement).value, 10),
                 fileAnnotationRefMode: parseInt((exportConfig.element.querySelector("#fileAnnotationRefMode") as HTMLSelectElement).value, 10),
                 pdfFooter: (exportConfig.element.querySelector("#pdfFooter") as HTMLInputElement).value,
+                docxTemplate: (exportConfig.element.querySelector("#docxTemplate") as HTMLInputElement).value,
                 blockRefTextLeft: (exportConfig.element.querySelector("#blockRefTextLeft") as HTMLInputElement).value,
                 blockRefTextRight: (exportConfig.element.querySelector("#blockRefTextRight") as HTMLInputElement).value,
                 tagOpenMarker: (exportConfig.element.querySelector("#tagOpenMarker") as HTMLInputElement).value,
@@ -195,7 +204,7 @@ export const exportConfig = {
         /// #if !BROWSER
         pandocBinPathElement.addEventListener("click", () => {
             if (window.siyuan.config.export.pandocBin) {
-                shell.showItemInFolder(window.siyuan.config.export.pandocBin);
+                showFileInFolder(window.siyuan.config.export.pandocBin);
             }
         });
         const pandocBinElement = exportConfig.element.querySelector("#pandocBin") as HTMLInputElement;

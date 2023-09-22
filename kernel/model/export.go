@@ -412,6 +412,19 @@ func ExportDocx(id, savePath string, removeAssets, merge bool) (err error) {
 		"-o", tmpDocxPath,
 	}
 
+	// Pandoc template for exporting docx https://github.com/siyuan-note/siyuan/issues/8740
+	docxTemplate := gulu.Str.RemoveInvisible(Conf.Export.DocxTemplate)
+	docxTemplate = strings.TrimSpace(docxTemplate)
+	if "" != docxTemplate {
+		if !gulu.File.IsExist(docxTemplate) {
+			logging.LogErrorf("docx template [%s] not found", docxTemplate)
+			msg := fmt.Sprintf(Conf.Language(197), docxTemplate)
+			return errors.New(msg)
+		}
+
+		args = append(args, "--reference-doc", docxTemplate)
+	}
+
 	pandoc := exec.Command(Conf.Export.PandocBin, args...)
 	gulu.CmdAttr(pandoc)
 	pandoc.Stdin = bytes.NewBufferString(content)
@@ -511,8 +524,19 @@ func ExportMarkdownHTML(id, savePath string, docx, merge bool) (name, dom string
 		theme = Conf.Appearance.ThemeDark
 	}
 	srcs = []string{"icons", "themes/" + theme}
+	appearancePath := util.AppearancePath
+	if util.IsSymlinkPath(util.AppearancePath) {
+		// Support for symlinked theme folder when exporting HTML https://github.com/siyuan-note/siyuan/issues/9173
+		var readErr error
+		appearancePath, readErr = filepath.EvalSymlinks(util.AppearancePath)
+		if nil != readErr {
+			logging.LogErrorf("readlink [%s] failed: %s", util.AppearancePath, readErr)
+			return
+		}
+	}
+
 	for _, src := range srcs {
-		from := filepath.Join(util.AppearancePath, src)
+		from := filepath.Join(appearancePath, src)
 		to := filepath.Join(savePath, "appearance", src)
 		if err := filelock.Copy(from, to); nil != err {
 			logging.LogErrorf("copy appearance from [%s] to [%s] failed: %s", from, savePath, err)
@@ -650,8 +674,18 @@ func ExportHTML(id, savePath string, pdf, image, keepFold, merge bool) (name, do
 			theme = Conf.Appearance.ThemeDark
 		}
 		srcs = []string{"icons", "themes/" + theme}
+		appearancePath := util.AppearancePath
+		if util.IsSymlinkPath(util.AppearancePath) {
+			// Support for symlinked theme folder when exporting HTML https://github.com/siyuan-note/siyuan/issues/9173
+			var readErr error
+			appearancePath, readErr = filepath.EvalSymlinks(util.AppearancePath)
+			if nil != readErr {
+				logging.LogErrorf("readlink [%s] failed: %s", util.AppearancePath, readErr)
+				return
+			}
+		}
 		for _, src := range srcs {
-			from := filepath.Join(util.AppearancePath, src)
+			from := filepath.Join(appearancePath, src)
 			to := filepath.Join(savePath, "appearance", src)
 			if err := filelock.Copy(from, to); nil != err {
 				logging.LogErrorf("copy appearance from [%s] to [%s] failed: %s", from, savePath, err)

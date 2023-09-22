@@ -1,10 +1,10 @@
 import {MenuItem} from "./Menu";
 /// #if !BROWSER
 import {dialog, getCurrentWindow} from "@electron/remote";
-import {ipcRenderer, shell} from "electron";
+import {ipcRenderer} from "electron";
 /// #endif
 import {openHistory} from "../history/history";
-import {getOpenNotebookCount, originalPath, pathPosix} from "../util/pathName";
+import {getOpenNotebookCount, originalPath, pathPosix, showFileInFolder} from "../util/pathName";
 import {mountHelp, newDailyNote} from "../util/mount";
 import {fetchPost} from "../util/fetch";
 import {Constants} from "../constants";
@@ -190,7 +190,11 @@ export const workspaceMenu = (app: App, rect: DOMRect) => {
                             if (hasClosestByClassName(event.target as Element, "b3-menu__action")) {
                                 event.preventDefault();
                                 event.stopPropagation();
-                                fetchPost("/api/system/removeWorkspaceDir", {path: item.path});
+                                fetchPost("/api/system/removeWorkspaceDir", {path: item.path}, () => {
+                                    confirmDialog(window.siyuan.languages.deleteOpConfirm, window.siyuan.languages.removeWorkspacePhysically.replace("${x}", item.path), () => {
+                                        fetchPost("/api/system/removeWorkspaceDirPhysically", {path: item.path});
+                                    });
+                                });
                                 return;
                             }
                             confirmDialog(window.siyuan.languages.confirm, `${pathPosix().basename(window.siyuan.config.system.workspaceDir)} -> ${pathPosix().basename(item.path)}?`, () => {
@@ -445,7 +449,7 @@ const workspaceItem = (item: IWorkspace) => {
             iconHTML: Constants.ZWSP,
             label: window.siyuan.languages.showInFolder,
             click() {
-                shell.showItemInFolder(item.path);
+                showFileInFolder(item.path);
             }
         }, {
             iconHTML: Constants.ZWSP,
