@@ -140,7 +140,7 @@ export class Title {
                 fetchPost("/api/block/getDocInfo", {
                     id: protyle.block.rootID
                 }, (response) => {
-                    openFileAttr(response.data.ial);
+                    openFileAttr(response.data.ial, "bookmark", protyle);
                 });
                 event.preventDefault();
                 event.stopPropagation();
@@ -179,7 +179,7 @@ export class Title {
                 fetchPost("/api/block/getDocInfo", {
                     id: protyle.block.rootID
                 }, (response) => {
-                    openFileAttr(response.data.ial);
+                    openFileAttr(response.data.ial, "bookmark", protyle);
                 });
             } else {
                 const iconRect = iconElement.getBoundingClientRect();
@@ -286,7 +286,6 @@ export class Title {
             setTitle(fileName);
         }, Constants.TIMEOUT_INPUT);
     }
-
 
     public setTitle(title: string) {
         if (code160to32(title) !== code160to32(this.editElement.textContent)) {

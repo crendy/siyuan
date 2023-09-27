@@ -1056,7 +1056,7 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
                 } else {
                     actionElement = topElement;
                 }
-                openAttr(actionElement);
+                openAttr(actionElement, "bookmark", protyle);
             } else {
                 const oldHTML = topElement.outerHTML;
                 const name = Lute.EscapeHTMLStr(selectText);
@@ -1463,7 +1463,7 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             return;
         }
 
-        if (isNotEditBlock(nodeElement) && matchHotKey("⌘C", event)) {
+        if (matchHotKey("⌘C", event)) {
             let html = "";
             protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select").forEach(item => {
                 html += removeEmbed(item);
@@ -1475,7 +1475,7 @@ export const keydown = (protyle: IProtyle, editorElement: HTMLElement) => {
             }
         }
 
-        if (isNotEditBlock(nodeElement) && matchHotKey("⌘X", event)) {
+        if (matchHotKey("⌘X", event)) {
             let html = "";
             nodeElement.classList.add("protyle-wysiwyg--select");
             const selectElements = protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select");

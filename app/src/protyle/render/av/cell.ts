@@ -2,6 +2,7 @@ import {transaction} from "../../wysiwyg/transaction";
 import {hasClosestBlock, hasClosestByClassName} from "../../util/hasClosest";
 import {openMenuPanel} from "./openMenuPanel";
 import {Menu} from "../../../plugin/Menu";
+import {updateAttrViewCellAnimation} from "./action";
 
 export const getCalcValue = (column: IAVColumn) => {
     if (!column.calc || !column.calc.result) {
@@ -63,10 +64,7 @@ export const getCalcValue = (column: IAVColumn) => {
     return value;
 };
 
-export const genCellValue = (colType: TAVCol, value: string | {
-    content: string,
-    color: string
-}[] | IAVCellDateValue) => {
+export const genCellValue = (colType: TAVCol, value: string | any) => {
     let cellValue: IAVCellValue;
     if (typeof value === "string") {
         if (colType === "number") {
@@ -117,15 +115,17 @@ export const genCellValue = (colType: TAVCol, value: string | {
         if (colType === "mSelect" || colType === "select") {
             cellValue = {
                 type: colType,
-                mSelect: value as {
-                    content: string,
-                    color: string
-                }[]
+                mSelect: value as IAVCellSelectValue[]
             };
         } else if (colType === "date") {
             cellValue = {
                 type: colType,
                 date: value as IAVCellDateValue
+            };
+        } else if (colType === "mAsset") {
+            cellValue = {
+                type: colType,
+                mAsset: value as IAVCellAssetValue[]
             };
         }
     }
@@ -339,8 +339,10 @@ export const openCalcMenu = (protyle: IProtyle, calcElement: HTMLElement) => {
     menu.open({x: calcRect.left, y: calcRect.bottom, h: calcRect.height});
 };
 
-export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[]) => {
-    const type = cellElements[0].parentElement.parentElement.firstElementChild.querySelector(`[data-col-id="${cellElements[0].getAttribute("data-col-id")}"]`).getAttribute("data-dtype") as TAVCol;
+export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type?: TAVCol) => {
+    if (!type) {
+        type = cellElements[0].parentElement.parentElement.firstElementChild.querySelector(`[data-col-id="${cellElements[0].getAttribute("data-col-id")}"]`).getAttribute("data-dtype") as TAVCol;
+    }
     if (type === "block") {
         return;
     }
@@ -354,6 +356,9 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[]) => {
         html = `<input type="number" value="${cellElements[0].firstElementChild.getAttribute("data-content")}" ${style} class="b3-text-field">`;
     } else if (["select", "mSelect"].includes(type) && blockElement) {
         openMenuPanel({protyle, blockElement, type: "select", cellElements});
+        return;
+    } else if (type === "mAsset" && blockElement) {
+        openMenuPanel({protyle, blockElement, type: "asset", cellElements});
         return;
     } else if (type === "date" && blockElement) {
         openMenuPanel({protyle, blockElement, type: "date", cellElements});
@@ -439,6 +444,7 @@ const updateCellValue = (protyle: IProtyle, type: TAVCol, cellElements: HTMLElem
                 [type]: oldValue
             }
         });
+        updateAttrViewCellAnimation(item);
     });
     transaction(protyle, doOperations, undoOperations);
     setTimeout(() => {

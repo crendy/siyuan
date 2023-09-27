@@ -86,11 +86,11 @@ func GetBlockAttributeViewKeys(blockID string) (ret []*BlockAttributeViewKeys) {
 	return
 }
 
-func RenderAttributeView(avID, nodeID string) (viewable av.Viewable, attrView *av.AttributeView, err error) {
+func RenderAttributeView(avID string) (viewable av.Viewable, attrView *av.AttributeView, err error) {
 	waitForSyncingStorages()
 
 	if avJSONPath := av.GetAttributeViewDataPath(avID); !gulu.File.IsExist(avJSONPath) {
-		attrView = av.NewAttributeView(avID, nodeID)
+		attrView = av.NewAttributeView(avID)
 		if err = av.SaveAttributeView(attrView); nil != err {
 			logging.LogErrorf("save attribute view [%s] failed: %s", avID, err)
 			return
@@ -101,14 +101,6 @@ func RenderAttributeView(avID, nodeID string) (viewable av.Viewable, attrView *a
 	if nil != err {
 		logging.LogErrorf("parse attribute view [%s] failed: %s", avID, err)
 		return
-	}
-
-	if "" == attrView.NodeID {
-		attrView.NodeID = nodeID
-		if err = av.SaveAttributeView(attrView); nil != err {
-			logging.LogErrorf("save attribute view [%s] failed: %s", avID, err)
-			return
-		}
 	}
 
 	if 1 > len(attrView.Views) {
@@ -450,7 +442,7 @@ func addAttributeViewBlock(blockID string, operation *Operation, tree *parse.Tre
 		}
 	}
 
-	value := &av.Value{ID: ast.NewNodeID(), KeyID: blockValues.Key.ID, BlockID: blockID, Block: &av.ValueBlock{ID: blockID, Content: getNodeRefText(node)}}
+	value := &av.Value{ID: ast.NewNodeID(), KeyID: blockValues.Key.ID, BlockID: blockID, Type: av.KeyTypeBlock, Block: &av.ValueBlock{ID: blockID, Content: getNodeRefText(node)}}
 	blockValues.Values = append(blockValues.Values, value)
 
 	attrs := parse.IAL2Map(node.KramdownIAL)
@@ -529,6 +521,19 @@ func (tx *Transaction) removeAttributeViewBlock(operation *Operation) (err error
 							}
 							delete(attrs, NodeAttrNamePrefixAvKey+operation.AvID+"-"+values.KeyID)
 							node.RemoveIALAttr(NodeAttrNamePrefixAvKey + operation.AvID + "-" + values.KeyID)
+
+							if avs := attrs[NodeAttrNameAvs]; "" != avs {
+								avIDs := strings.Split(avs, ",")
+								avIDs = gulu.Str.RemoveElem(avIDs, operation.AvID)
+								if 0 == len(avIDs) {
+									delete(attrs, NodeAttrNameAvs)
+									node.RemoveIALAttr(NodeAttrNameAvs)
+								} else {
+									attrs[NodeAttrNameAvs] = strings.Join(avIDs, ",")
+									node.SetIALAttr(NodeAttrNameAvs, strings.Join(avIDs, ","))
+								}
+							}
+
 							if err = setNodeAttrsWithTx(tx, node, tree, attrs); nil != err {
 								return
 							}
@@ -764,7 +769,7 @@ func addAttributeViewColumn(operation *Operation) (err error) {
 
 	keyType := av.KeyType(operation.Typ)
 	switch keyType {
-	case av.KeyTypeText, av.KeyTypeNumber, av.KeyTypeDate, av.KeyTypeSelect, av.KeyTypeMSelect, av.KeyTypeURL, av.KeyTypeEmail, av.KeyTypePhone:
+	case av.KeyTypeText, av.KeyTypeNumber, av.KeyTypeDate, av.KeyTypeSelect, av.KeyTypeMSelect, av.KeyTypeURL, av.KeyTypeEmail, av.KeyTypePhone, av.KeyTypeMAsset:
 		key := av.NewKey(operation.ID, operation.Name, keyType)
 		attrView.KeyValues = append(attrView.KeyValues, &av.KeyValues{Key: key})
 
@@ -823,7 +828,7 @@ func updateAttributeViewColumn(operation *Operation) (err error) {
 
 	colType := av.KeyType(operation.Typ)
 	switch colType {
-	case av.KeyTypeBlock, av.KeyTypeText, av.KeyTypeNumber, av.KeyTypeDate, av.KeyTypeSelect, av.KeyTypeMSelect, av.KeyTypeURL, av.KeyTypeEmail, av.KeyTypePhone:
+	case av.KeyTypeBlock, av.KeyTypeText, av.KeyTypeNumber, av.KeyTypeDate, av.KeyTypeSelect, av.KeyTypeMSelect, av.KeyTypeURL, av.KeyTypeEmail, av.KeyTypePhone, av.KeyTypeMAsset:
 		for _, keyValues := range attrView.KeyValues {
 			if keyValues.Key.ID == operation.ID {
 				keyValues.Key.Name = operation.Name

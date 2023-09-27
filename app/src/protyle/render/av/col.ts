@@ -6,12 +6,12 @@ import {getDefaultOperatorByType, setFilter} from "./filter";
 import {genCellValue} from "./cell";
 import {openMenuPanel} from "./openMenuPanel";
 import {getLabelByNumberFormat} from "./number";
+import {addAttrViewColAnimation, removeAttrViewColAnimation} from "./action";
 
 export const duplicateCol = (options: {
     protyle: IProtyle,
     type: TAVCol,
     avID: string,
-    nodeID: string,
     colId: string,
     newValue: string
 }) => {
@@ -23,7 +23,7 @@ export const duplicateCol = (options: {
         options.newValue = `${options.newValue} (1)`;
     }
     if (["select", "mSelect"].includes(options.type)) {
-        fetchPost("/api/av/renderAttributeView", {id: options.avID, nodeID: options.nodeID}, (response) => {
+        fetchPost("/api/av/renderAttributeView", {id: options.avID}, (response) => {
             const data = response.data as IAV;
             let colOptions;
             data.view.columns.find((item) => {
@@ -72,6 +72,14 @@ export const duplicateCol = (options: {
             avID: options.avID,
         }]);
     }
+    addAttrViewColAnimation({
+        blockElement: options.protyle.wysiwyg.element.querySelector(`[data-av-id="${options.avID}"]`),
+        protyle: options.protyle,
+        type: options.type,
+        name: options.newValue,
+        previousId: options.colId,
+        id
+    });
 };
 
 export const getEditHTML = (options: {
@@ -238,6 +246,8 @@ export const getColIconByType = (type: TAVCol) => {
             return "iconCalendar";
         case "url":
             return "iconLink";
+        case "mAsset":
+            return "iconImage";
         case "email":
             return "iconEmail";
         case "phone":
@@ -274,11 +284,10 @@ export const updateHeader = (rowElement: HTMLElement) => {
     avHeadElement.style.position = "sticky";
 };
 
-export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellElement: HTMLElement) => {
+export const showColMenu = (protyle: IProtyle, blockElement: Element, cellElement: HTMLElement) => {
     const type = cellElement.getAttribute("data-dtype") as TAVCol;
     const colId = cellElement.getAttribute("data-col-id");
     const avID = blockElement.getAttribute("data-av-id");
-    const nodeID = blockElement.getAttribute("data-node-id");
     const menu = new Menu("av-header-cell", () => {
         const newValue = (window.siyuan.menus.menu.element.querySelector(".b3-text-field") as HTMLInputElement).value;
         if (newValue === cellElement.textContent.trim()) {
@@ -328,7 +337,6 @@ export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellEl
         click() {
             fetchPost("/api/av/renderAttributeView", {
                 id: avID,
-                nodeID
             }, (response) => {
                 transaction(protyle, [{
                     action: "setAttrViewSorts",
@@ -351,7 +359,6 @@ export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellEl
         click() {
             fetchPost("/api/av/renderAttributeView", {
                 id: avID,
-                nodeID
             }, (response) => {
                 transaction(protyle, [{
                     action: "setAttrViewSorts",
@@ -368,48 +375,49 @@ export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellEl
             });
         }
     });
-    menu.addItem({
-        icon: "iconFilter",
-        label: window.siyuan.languages.filter,
-        click() {
-            fetchPost("/api/av/renderAttributeView", {
-                id: avID,
-                nodeID
-            }, (response) => {
-                const avData = response.data as IAV;
-                let filter: IAVFilter;
-                avData.view.filters.find((item) => {
-                    if (item.column === colId) {
-                        filter = item;
-                        return true;
+    if (type !== "mAsset") {
+        menu.addItem({
+            icon: "iconFilter",
+            label: window.siyuan.languages.filter,
+            click() {
+                fetchPost("/api/av/renderAttributeView", {
+                    id: avID,
+                }, (response) => {
+                    const avData = response.data as IAV;
+                    let filter: IAVFilter;
+                    avData.view.filters.find((item) => {
+                        if (item.column === colId) {
+                            filter = item;
+                            return true;
+                        }
+                    });
+                    if (!filter) {
+                        filter = {
+                            column: colId,
+                            operator: getDefaultOperatorByType(type),
+                            value: genCellValue(type, "")
+                        };
+                        avData.view.filters.push(filter);
+                        transaction(protyle, [{
+                            action: "setAttrViewFilters",
+                            avID,
+                            data: [filter]
+                        }], [{
+                            action: "setAttrViewFilters",
+                            avID,
+                            data: []
+                        }]);
                     }
+                    setFilter({
+                        filter,
+                        protyle,
+                        data: avData,
+                        target: blockElement.querySelector(`.av__row--header .av__cell[data-col-id="${colId}"]`),
+                    });
                 });
-                if (!filter) {
-                    filter = {
-                        column: colId,
-                        operator: getDefaultOperatorByType(type),
-                        value: genCellValue(type, "")
-                    };
-                    avData.view.filters.push(filter);
-                    transaction(protyle, [{
-                        action: "setAttrViewFilters",
-                        avID,
-                        data: [filter]
-                    }], [{
-                        action: "setAttrViewFilters",
-                        avID,
-                        data: []
-                    }]);
-                }
-                setFilter({
-                    filter,
-                    protyle,
-                    data: avData,
-                    target: cellElement,
-                });
-            });
-        }
-    });
+            }
+        });
+    }
     menu.addSeparator();
     if (type !== "block") {
         menu.addItem({
@@ -437,7 +445,6 @@ export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellEl
                     protyle,
                     type,
                     avID,
-                    nodeID,
                     colId,
                     newValue: (window.siyuan.menus.menu.element.querySelector(".b3-text-field") as HTMLInputElement).value
                 });
@@ -458,6 +465,7 @@ export const showColMenu = (protyle: IProtyle, blockElement: HTMLElement, cellEl
                     type: type,
                     id: colId
                 }]);
+                removeAttrViewColAnimation(blockElement, colId);
             }
         });
         menu.addSeparator();
