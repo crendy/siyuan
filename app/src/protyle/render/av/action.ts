@@ -9,7 +9,6 @@ import {emitOpenMenu} from "../../../plugin/EventBus";
 import {addCol} from "./addCol";
 import {openMenuPanel} from "./openMenuPanel";
 import {hintRef} from "../../hint/extend";
-import {hideElements} from "../../ui/hideElements";
 import {focusByRange} from "../../util/selection";
 import {writeText} from "../../util/compatibility";
 import {showMessage} from "../../../dialog/message";
@@ -31,6 +30,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
     if (protyle.disabled) {
         return false;
     }
+
     const addElement = hasClosestByAttribute(event.target, "data-type", "av-header-add");
     if (addElement) {
         const addMenu = addCol(protyle, blockElement);
@@ -149,6 +149,17 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
         return true;
     }
 
+    const blockMoreElement = hasClosestByAttribute(event.target, "data-type", "block-more");
+    if (blockMoreElement) {
+        protyle.toolbar.range = document.createRange();
+        protyle.toolbar.range.selectNodeContents(blockMoreElement);
+        focusByRange(protyle.toolbar.range);
+        hintRef(blockMoreElement.previousElementSibling.textContent.trim(), protyle, "av");
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+    }
+
     const cellElement = hasClosestByClassName(event.target, "av__cell");
     if (cellElement && !cellElement.parentElement.classList.contains("av__row--header")) {
         cellElement.parentElement.parentElement.querySelectorAll(".av__row--select").forEach(item => {
@@ -171,18 +182,27 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 
     const addRowElement = hasClosestByClassName(event.target, "av__row--add");
     if (addRowElement) {
-        if (protyle.hint.element.classList.contains("fn__none")) {
-            protyle.toolbar.range = document.createRange();
-            protyle.toolbar.range.selectNodeContents(blockElement.querySelector(".av__title"));
-            focusByRange(protyle.toolbar.range);
-            hintRef("", protyle, "av");
-        } else {
-            hideElements(["hint"], protyle);
-        }
+        const avID = blockElement.getAttribute("data-av-id");
+        const srcIDs = [Lute.NewNodeID()];
+        const previousID = addRowElement.previousElementSibling.getAttribute("data-id") || "";
+        transaction(protyle, [{
+            action: "insertAttrViewBlock",
+            avID,
+            previousID,
+            srcIDs,
+            isDetached: true,
+        }], [{
+            action: "removeAttrViewBlock",
+            srcIDs,
+            avID,
+        }]);
+        insertAttrViewBlockAnimation(blockElement, 1, previousID, avID);
+        popTextCell(protyle, [addRowElement.previousElementSibling.querySelector('[data-detached="true"]')], "block");
         event.preventDefault();
         event.stopPropagation();
         return true;
     }
+
     return false;
 };
 
@@ -258,13 +278,25 @@ export const avContextmenu = (protyle: IProtyle, event: MouseEvent & { detail: a
     menu.addSeparator();
     const editAttrSubmenu: IMenu[] = [];
     rowElement.parentElement.querySelectorAll(".av__row--header .av__cell").forEach((cellElement: HTMLElement) => {
-        editAttrSubmenu.push({
-            icon: getColIconByType(cellElement.getAttribute("data-dtype") as TAVCol),
-            label: cellElement.textContent.trim(),
-            click() {
-                popTextCell(protyle, Array.from(blockElement.querySelectorAll(`.av__row--select:not(.av__row--header) .av__cell[data-col-id="${cellElement.dataset.colId}"]`)));
-            }
-        });
+        let hideBlock = false
+        const selectElements: HTMLElement[] = Array.from(blockElement.querySelectorAll(`.av__row--select:not(.av__row--header) .av__cell[data-col-id="${cellElement.dataset.colId}"]`))
+        if (cellElement.dataset.dtype === "block") {
+            selectElements.find(item => {
+                if (!item.dataset.detached) {
+                    hideBlock = true;
+                    return true;
+                }
+            })
+        }
+        if (!hideBlock) {
+            editAttrSubmenu.push({
+                icon: getColIconByType(cellElement.getAttribute("data-dtype") as TAVCol),
+                label: cellElement.textContent.trim(),
+                click() {
+                    popTextCell(protyle, selectElements);
+                }
+            });
+        }
     });
     menu.addItem({
         icon: "iconAttr",
@@ -308,42 +340,6 @@ export const updateAVName = (protyle: IProtyle, blockElement: Element) => {
     nameElement.dataset.title = nameElement.textContent.trim();
 };
 
-export const addAttrViewColAnimation = (options: {
-    blockElement: Element,
-    protyle: IProtyle,
-    type: TAVCol,
-    name: string,
-    previousId?: string,
-    id: string
-}) => {
-    if (!options.blockElement) {
-        return;
-    }
-    options.blockElement.querySelectorAll(".av__row").forEach((item, index) => {
-        let previousElement;
-        if (options.previousId) {
-            previousElement = item.querySelector(`[data-col-id="${options.previousId}"]`);
-        } else {
-            previousElement = item.lastElementChild.previousElementSibling;
-        }
-        let html = "";
-        if (index === 0) {
-            html = `<div class="av__cell" data-col-id="${options.id}" data-dtype="${options.type}" style="width: 200px;white-space: nowrap;">
-    <div draggable="true" class="av__cellheader">
-        <svg><use xlink:href="#${getColIconByType(options.type)}"></use></svg>
-        <span class="av__celltext">${options.name}</span>
-    </div>
-    <div class="av__widthdrag"></div>
-</div>`;
-        } else {
-            html = '<div class="av__cell" style="width: 200px"></div>';
-        }
-        previousElement.insertAdjacentHTML("afterend", html);
-    });
-    window.siyuan.menus.menu.remove();
-    showColMenu(options.protyle, options.blockElement, options.blockElement.querySelector(`.av__row--header .av__cell[data-col-id="${options.id}"]`));
-};
-
 export const updateAttrViewCellAnimation = (cellElement: HTMLElement) => {
     cellElement.style.opacity = "0.38";
     cellElement.style.backgroundColor = "var(--b3-theme-surface-light)";
@@ -355,16 +351,16 @@ export const removeAttrViewColAnimation = (blockElement: Element, id: string) =>
     });
 };
 
-export const insertAttrViewBlockAnimation = (blockElement: Element, size: number, previousId: string) => {
+export const insertAttrViewBlockAnimation = (blockElement: Element, size: number, previousId: string, avId?: string) => {
     const previousElement = blockElement.querySelector(`.av__row[data-id="${previousId}"]`) || blockElement.querySelector(".av__row--header");
     let colHTML = "";
     previousElement.querySelectorAll(".av__cell").forEach((item: HTMLElement) => {
-        colHTML += `<div class="av__cell" style="width: ${item.style.width}"><span class="av__pulse"></span></div>`;
+        colHTML += `<div class="av__cell" style="width: ${item.style.width}" ${item.getAttribute("data-block-id") ? ' data-detached="true"' : ""}><span class="av__pulse"></span></div>`;
     });
 
     let html = "";
     new Array(size).fill(1).forEach(() => {
-        html += `<div class="av__row">
+        html += `<div class="av__row" data-avid="${avId}">
     <div style="width: 24px"></div>
     ${colHTML}
 </div>`;

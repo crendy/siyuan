@@ -1,6 +1,6 @@
 import {Menu} from "../../../plugin/Menu";
 import {transaction} from "../../wysiwyg/transaction";
-import {addAttrViewColAnimation} from "./action";
+import {addAttrViewColAnimation} from "./col";
 
 export const addCol = (protyle: IProtyle, blockElement: Element) => {
     const menu = new Menu("av-header-add");
@@ -226,6 +226,81 @@ export const addCol = (protyle: IProtyle, blockElement: Element) => {
                 protyle: protyle,
                 type: "phone",
                 name: window.siyuan.languages.phone,
+                id
+            });
+        }
+    });
+    menu.addItem({
+        icon: "iconMath",
+        label: window.siyuan.languages.template,
+        click() {
+            const id = Lute.NewNodeID();
+            transaction(protyle, [{
+                action: "addAttrViewCol",
+                name: window.siyuan.languages.template,
+                avID,
+                type: "template",
+                id
+            }], [{
+                action: "removeAttrViewCol",
+                id,
+                avID,
+            }]);
+            addAttrViewColAnimation({
+                blockElement: blockElement,
+                protyle: protyle,
+                type: "template",
+                name: window.siyuan.languages.template,
+                id
+            });
+        }
+    });
+    menu.addItem({
+        icon: "iconClock",
+        label: window.siyuan.languages.createdTime,
+        click() {
+            const id = Lute.NewNodeID();
+            transaction(protyle, [{
+                action: "addAttrViewCol",
+                name: window.siyuan.languages.createdTime,
+                avID,
+                type: "created",
+                id
+            }], [{
+                action: "removeAttrViewCol",
+                id,
+                avID,
+            }]);
+            addAttrViewColAnimation({
+                blockElement: blockElement,
+                protyle: protyle,
+                type: "created",
+                name: window.siyuan.languages.createdTime,
+                id
+            });
+        }
+    });
+    menu.addItem({
+        icon: "iconClock",
+        label: window.siyuan.languages.updatedTime,
+        click() {
+            const id = Lute.NewNodeID();
+            transaction(protyle, [{
+                action: "addAttrViewCol",
+                name: window.siyuan.languages.updatedTime,
+                avID,
+                type: "updated",
+                id
+            }], [{
+                action: "removeAttrViewCol",
+                id,
+                avID,
+            }]);
+            addAttrViewColAnimation({
+                blockElement: blockElement,
+                protyle: protyle,
+                type: "updated",
+                name: window.siyuan.languages.updatedTime,
                 id
             });
         }

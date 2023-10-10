@@ -32,8 +32,10 @@ import {upDownHint} from "../util/upDownHint";
 import {
     assetFilterMenu,
     assetInputEvent,
-    assetMethodMenu, assetMoreMenu,
-    openSearchAsset, renderNextAssetMark,
+    assetMethodMenu,
+    assetMoreMenu,
+    openSearchAsset,
+    renderNextAssetMark,
     renderPreview,
     toggleAssetHistory
 } from "./assets";
@@ -235,7 +237,7 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
         <div id="searchPreview" class="fn__flex-1 search__preview"></div>
     </div>
     <div class="search__tip${closeCB ? "" : " fn__none"}">
-        <kbd>↑/↓</kbd> ${window.siyuan.languages.searchTip1}
+        <kbd>↑/↓/PageUp/PageDown</kbd> ${window.siyuan.languages.searchTip1}
         <kbd>${updateHotkeyTip(window.siyuan.config.keymap.general.newFile.custom)}</kbd> ${window.siyuan.languages.new}
         <kbd>Enter/Double Click</kbd> ${window.siyuan.languages.searchTip2}
         <kbd>Click</kbd> ${window.siyuan.languages.searchTip3}
@@ -365,6 +367,7 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                         superBlock: window.siyuan.config.search.superBlock,
                         paragraph: window.siyuan.config.search.paragraph,
                         embedBlock: window.siyuan.config.search.embedBlock,
+                        databaseBlock: window.siyuan.config.search.databaseBlock,
                     }
                 }, config, edit);
                 element.querySelector(".b3-chip--current")?.classList.remove("b3-chip--current");
@@ -578,6 +581,7 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                             superBlock: window.siyuan.config.search.superBlock,
                             paragraph: window.siyuan.config.search.paragraph,
                             embedBlock: window.siyuan.config.search.embedBlock,
+                            databaseBlock: window.siyuan.config.search.databaseBlock,
                         }
                     }, config, edit);
                     element.querySelector("#criteria .b3-chip--current")?.classList.remove("b3-chip--current");
@@ -634,7 +638,7 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                     }).element);
                 });
                 const rect = target.getBoundingClientRect();
-                window.siyuan.menus.menu.popup({x: rect.right, y: rect.bottom}, true);
+                window.siyuan.menus.menu.popup({x: rect.right, y: rect.bottom, isLeft: true});
                 event.stopPropagation();
                 event.preventDefault();
                 break;
@@ -649,14 +653,22 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                 break;
             } else if (type === "assetPrevious") {
                 if (!target.getAttribute("disabled")) {
-                    assetInputEvent(assetsElement, localSearch, parseInt(assetsElement.querySelector("#searchAssetResult .fn__flex-center").textContent.split("/")[1]) - 1);
+                    let currentPage = parseInt(assetsElement.querySelector("#searchAssetResult .fn__flex-center").textContent.split("/")[0]);
+                    if (currentPage > 1) {
+                        currentPage--;
+                        assetInputEvent(assetsElement, localSearch, currentPage);
+                    }
                 }
                 event.stopPropagation();
                 event.preventDefault();
                 break;
             } else if (type === "assetNext") {
                 if (!target.getAttribute("disabled")) {
-                    assetInputEvent(assetsElement, localSearch, parseInt(assetsElement.querySelector("#searchAssetResult .fn__flex-center").textContent.split("/")[1]) + 1);
+                    let currentPage = parseInt(assetsElement.querySelector("#searchAssetResult .fn__flex-center").textContent.split("/")[0]);
+                    if (currentPage < parseInt(assetsElement.querySelector("#searchAssetResult .fn__flex-center").textContent.split("/")[1])) {
+                        currentPage++;
+                        assetInputEvent(assetsElement, localSearch, currentPage);
+                    }
                 }
                 event.stopPropagation();
                 event.preventDefault();
@@ -690,7 +702,7 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                     inputEvent(element, config, undefined, edit, true);
                 });
                 const rect = target.getBoundingClientRect();
-                window.siyuan.menus.menu.popup({x: rect.right, y: rect.bottom}, true);
+                window.siyuan.menus.menu.popup({x: rect.right, y: rect.bottom, isLeft: true});
                 event.stopPropagation();
                 event.preventDefault();
                 break;
@@ -991,6 +1003,24 @@ export const genSearch = (app: App, config: ISearchOption, element: Element, clo
                 value: searchInputElement.value,
                 edit,
             });
+            event.preventDefault();
+        } else if (Constants.KEYCODELIST[event.keyCode] === "PageUp") {
+            const previousElement = element.querySelector('[data-type="previous"]');
+            if (!previousElement.getAttribute("disabled")) {
+                if (config.page > 1) {
+                    config.page--;
+                    inputTimeout = inputEvent(element, config, inputTimeout, edit);
+                }
+            }
+            event.preventDefault();
+        } else if (Constants.KEYCODELIST[event.keyCode] === "PageDown") {
+            const nextElement = element.querySelector('[data-type="next"]');
+            if (!nextElement.getAttribute("disabled")) {
+                if (config.page < parseInt(nextElement.parentElement.querySelector("#searchResult").getAttribute("data-pagecount"))) {
+                    config.page++;
+                    inputTimeout = inputEvent(element, config, inputTimeout, edit);
+                }
+            }
             event.preventDefault();
         }
     });

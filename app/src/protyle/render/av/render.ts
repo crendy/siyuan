@@ -3,6 +3,7 @@ import {getColIconByType} from "./col";
 import {Constants} from "../../../constants";
 import {getCalcValue} from "./cell";
 import * as dayjs from "dayjs";
+import {unicode2Emoji} from "../../../emoji";
 
 export const avRender = (element: Element, protyle: IProtyle, cb?: () => void) => {
     let avElements: Element[] = [];
@@ -32,11 +33,11 @@ export const avRender = (element: Element, protyle: IProtyle, cb?: () => void) =
                     if (column.hidden) {
                         return;
                     }
-                    tableHTML += `<div class="av__cell" data-col-id="${column.id}" data-dtype="${column.type}"  
+                    tableHTML += `<div class="av__cell" data-col-id="${column.id}" data-icon="${column.icon}" data-dtype="${column.type}"  
 style="width: ${column.width || "200px"};
 ${column.wrap ? "" : "white-space: nowrap;"}">
     <div draggable="true" class="av__cellheader">
-        <svg><use xlink:href="#${column.icon || getColIconByType(column.type)}"></use></svg>
+        ${column.icon ? unicode2Emoji(column.icon, "av__cellicon", true) : `<svg class="av__cellicon"><use xlink:href="#${getColIconByType(column.type)}"></use></svg>`}
         <span class="av__celltext">${column.name}</span>
     </div>
     <div class="av__widthdrag"></div>
@@ -54,7 +55,7 @@ style="width: ${column.width || "200px"}">${getCalcValue(column) || '<svg><use x
                 data.rows.forEach((row: IAVRow) => {
                     tableHTML += `<div class="av__row" data-id="${row.id}">
 <div class="av__gutters ariaLabel" draggable="true" data-position="right" aria-label="${window.siyuan.languages.rowTip}">
-    <button><svg><use xlink:href="#iconLine"></use></svg></button>
+    <button><svg><use xlink:href="#iconDrag"></use></svg></button>
 </div>
 <div class="av__firstcol"><svg><use xlink:href="#iconUncheck"></use></svg></div>`;
                     row.cells.forEach((cell, index) => {
@@ -62,20 +63,28 @@ style="width: ${column.width || "200px"}">${getCalcValue(column) || '<svg><use x
                             return;
                         }
                         let text = "";
-                        if (cell.valueType === "text") {
-                            text = `<span class="av__celltext">${cell.value?.text.content || ""}</span>`;
+                        if (["text", "template"].includes(cell.valueType)) {
+                            text = `<span class="av__celltext">${cell.value ? (cell.value[cell.valueType as "text"].content || "") : ""}</span>`;
                         } else if (["url", "email", "phone"].includes(cell.valueType)) {
-                            text = `<span class="av__celltext av__celltext--url" data-type="${cell.valueType}">${cell.value ? cell.value[cell.valueType as "url"].content : ""}</span>`;
+                            const urlContent = cell.value ? cell.value[cell.valueType as "url"].content : "";
+                            // https://github.com/siyuan-note/siyuan/issues/9291
+                            let urlAttr = "";
+                            if (cell.valueType === "url") {
+                                urlAttr = ` data-href="${urlContent}"`;
+                            }
+                            text = `<span class="av__celltext av__celltext--url" data-type="${cell.valueType}"${urlAttr}>${urlContent}</span>`;
                             if (cell.value && cell.value[cell.valueType as "url"].content) {
                                 text += `<span data-type="copy" class="b3-tooltips b3-tooltips__n block__icon" aria-label="${window.siyuan.languages.copy}"><svg><use xlink:href="#iconCopy"></use></svg></span>`;
                             }
                         } else if (cell.valueType === "block") {
-                            text = `<span class="av__celltext">${cell.value?.block.content || ""}</span>`;
-                            if (cell.value?.block.id) {
+                            text = `<span class="av__celltext">${cell.value.block.content || ""}</span>`;
+                            if (cell.value?.isDetached) {
+                                text += `<span class="b3-chip b3-chip--info b3-chip--small" data-type="block-more" >${window.siyuan.languages.more}</span>`;
+                            } else {
                                 text += `<span class="b3-chip b3-chip--info b3-chip--small" data-type="block-ref" data-id="${cell.value.block.id}" data-subtype="s">${window.siyuan.languages.openBy}</span>`;
                             }
                         } else if (cell.valueType === "number") {
-                            text = `<span class="av__celltext" data-content="${cell.value?.number.content || ""}">${cell.value?.number.formattedContent || ""}</span>`;
+                            text = `<span class="av__celltext" data-content="${cell.value?.number.isNotEmpty ? cell.value?.number.content : ""}">${cell.value?.number.formattedContent || ""}</span>`;
                         } else if (cell.valueType === "mSelect" || cell.valueType === "select") {
                             cell.value?.mSelect?.forEach((item) => {
                                 text += `<span class="b3-chip b3-chip--middle" style="background-color:var(--b3-font-background${item.color});color:var(--b3-font-color${item.color})">${item.content}</span>`;
@@ -87,11 +96,19 @@ style="width: ${column.width || "200px"}">${getCalcValue(column) || '<svg><use x
                             }
                         } else if (cell.valueType === "date") {
                             text = '<span class="av__celltext av__celltext--date">';
-                            if (cell.value?.date.isNotEmpty) {
-                                text += dayjs(cell.value.date.content).format("YYYY-MM-DD HH:mm");
+                            const dataValue = cell.value ? cell.value.date : null;
+                            if (dataValue && dataValue.isNotEmpty) {
+                                text += dayjs(dataValue.content).format("YYYY-MM-DD HH:mm");
                             }
-                            if (cell.value?.date.hasEndDate && cell.value?.date.isNotEmpty && cell.value?.date.isNotEmpty2) {
-                                text += `<svg><use xlink:href="#iconForward"></use></svg>${dayjs(cell.value.date.content2).format("YYYY-MM-DD HH:mm")}`;
+                            if (dataValue && dataValue.hasEndDate && dataValue.isNotEmpty && dataValue.isNotEmpty2) {
+                                text += `<svg><use xlink:href="#iconForward"></use></svg>${dayjs(dataValue.content2).format("YYYY-MM-DD HH:mm")}`;
+                            }
+                            text += "</span>";
+                        } else if (["created", "updated"].includes(cell.valueType)) {
+                            text = '<span class="av__celltext av__celltext--date">';
+                            const dataValue = cell.value ? cell.value[cell.valueType as "date"] : null;
+                            if (dataValue && dataValue.content) {
+                                text += dayjs(dataValue.content).format("YYYY-MM-DD HH:mm");
                             }
                             text += "</span>";
                         } else if (cell.valueType === "mAsset") {
@@ -110,9 +127,10 @@ style="width: ${column.width || "200px"}">${getCalcValue(column) || '<svg><use x
                         }
                         tableHTML += `<div class="av__cell" data-id="${cell.id}" data-col-id="${data.columns[index].id}"
 ${cell.valueType === "block" ? 'data-block-id="' + (cell.value.block.id || "") + '"' : ""}  
+${cell.value?.isDetached ? ' data-detached="true"' : ""} 
 style="width: ${data.columns[index].width || "200px"};
 ${cell.bgColor ? `background-color:${cell.bgColor};` : ""}
-${data.columns[index].wrap ? "" : "white-space: nowrap;"}
+white-space: ${data.columns[index].wrap ? "pre-wrap" : "nowrap"};
 ${cell.valueType !== "number" ? "" : "flex-direction: row-reverse;"}
 ${cell.color ? `color:${cell.color};` : ""}">${text}</div>`;
                     });
@@ -127,7 +145,9 @@ ${cell.color ? `color:${cell.color};` : ""}">${text}</div>`;
                 });
                 const paddingLeft = e.parentElement.style.paddingLeft;
                 const paddingRight = e.parentElement.style.paddingRight;
-                e.style.width = e.parentElement.clientWidth + "px";
+                if (e.parentElement.clientWidth > 0) {
+                    e.style.width = e.parentElement.clientWidth + "px";
+                }
                 e.style.alignSelf = "center";
                 e.firstElementChild.outerHTML = `<div>
     <div class="av__header" style="padding-left: ${paddingLeft};padding-right: ${paddingRight};">

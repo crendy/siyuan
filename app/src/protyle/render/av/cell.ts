@@ -3,6 +3,8 @@ import {hasClosestBlock, hasClosestByClassName} from "../../util/hasClosest";
 import {openMenuPanel} from "./openMenuPanel";
 import {Menu} from "../../../plugin/Menu";
 import {updateAttrViewCellAnimation} from "./action";
+import {isCtrl} from "../../util/compatibility";
+import {objEquals} from "../../../util/functions";
 
 export const getCalcValue = (column: IAVColumn) => {
     if (!column.calc || !column.calc.result) {
@@ -10,8 +12,8 @@ export const getCalcValue = (column: IAVColumn) => {
     }
     let resultCalc: any = column.calc.result.number;
     if (column.calc.operator === "Earliest" || column.calc.operator === "Latest" ||
-        (column.calc.operator === "Range" && column.type === "date")) {
-        resultCalc = column.calc.result.date;
+        (column.calc.operator === "Range" && ["date", "created", "updated"].includes(column.type))) {
+        resultCalc = column.calc.result[column.type as "date"];
     }
     let value = "";
     switch (column.calc.operator) {
@@ -84,7 +86,7 @@ export const genCellValue = (colType: TAVCol, value: string | any) => {
                     }
                 };
             }
-        } else if (["text", "block", "url", "phone", "email"].includes(colType)) {
+        } else if (["text", "block", "url", "phone", "email", "template"].includes(colType)) {
             cellValue = {
                 type: colType,
                 [colType]: {
@@ -99,10 +101,10 @@ export const genCellValue = (colType: TAVCol, value: string | any) => {
                     color: ""
                 }]
             };
-        } else if (colType === "date" && value === "") {
+        } else if (["date", "created", "updated"].includes(colType) && value === "") {
             cellValue = {
                 type: colType,
-                date: {
+                [colType]: {
                     content: null,
                     isNotEmpty: false,
                     content2: null,
@@ -117,10 +119,10 @@ export const genCellValue = (colType: TAVCol, value: string | any) => {
                 type: colType,
                 mSelect: value as IAVCellSelectValue[]
             };
-        } else if (colType === "date") {
+        } else if (["date", "created", "updated"].includes(colType)) {
             cellValue = {
                 type: colType,
-                date: value as IAVCellDateValue
+                [colType]: value as IAVCellDateValue
             };
         } else if (colType === "mAsset") {
             cellValue = {
@@ -163,6 +165,7 @@ const calcItem = (options: {
         }
     });
 };
+
 export const openCalcMenu = (protyle: IProtyle, calcElement: HTMLElement) => {
     const blockElement = hasClosestBlock(calcElement);
     if (!blockElement) {
@@ -306,7 +309,7 @@ export const openCalcMenu = (protyle: IProtyle, calcElement: HTMLElement) => {
             operator: "Range",
             label: window.siyuan.languages.calcOperatorRange
         });
-    } else if (type === "date") {
+    } else if (["date", "created", "updated"].includes(type)) {
         calcItem({
             menu,
             protyle,
@@ -343,14 +346,17 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type
     if (!type) {
         type = cellElements[0].parentElement.parentElement.firstElementChild.querySelector(`[data-col-id="${cellElements[0].getAttribute("data-col-id")}"]`).getAttribute("data-dtype") as TAVCol;
     }
-    if (type === "block") {
+    if (type === "template" || type === "updated" || type === "created") {
+        return;
+    }
+    if (type === "block" && (cellElements.length > 1 || !cellElements[0].getAttribute("data-detached"))) {
         return;
     }
     const cellRect = cellElements[0].getBoundingClientRect();
     let html = "";
-    const style = `style="position:absolute;left: ${cellRect.left}px;top: ${cellRect.top}px;width:${Math.max(cellRect.width, 200)}px;height: ${cellRect.height}px"`;
+    const style = `style="position:absolute;left: ${cellRect.left}px;top: ${cellRect.top}px;width:${Math.max(cellRect.width, 100)}px;height: ${cellRect.height}px"`;
     const blockElement = hasClosestBlock(cellElements[0]);
-    if (["text", "url", "email", "phone"].includes(type)) {
+    if (["text", "url", "email", "phone", "block"].includes(type)) {
         html = `<textarea ${style} class="b3-text-field">${cellElements[0].firstElementChild.textContent}</textarea>`;
     } else if (type === "number") {
         html = `<input type="number" value="${cellElements[0].firstElementChild.getAttribute("data-content")}" ${style} class="b3-text-field">`;
@@ -380,7 +386,8 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type
             if (event.isComposing) {
                 return;
             }
-            if (event.key === "Escape" || event.key === "Enter") {
+            if (event.key === "Escape" ||
+                (event.key === "Enter" && !event.shiftKey && !isCtrl(event))) {
                 updateCellValue(protyle, type, cellElements);
                 event.preventDefault();
                 event.stopPropagation();
@@ -395,6 +402,14 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type
 };
 
 const updateCellValue = (protyle: IProtyle, type: TAVCol, cellElements: HTMLElement[]) => {
+    if (!document.contains(cellElements[0]) && cellElements.length === 1 && cellElements[0].dataset.detached === "true") {
+        // 新增行后弹出的输入框进行修改后，原始 cell 已被更新
+        const avid = cellElements[0].parentElement.dataset.avid;
+        cellElements[0] = protyle.wysiwyg.element.querySelector(`[data-av-id="${avid}"] .av__row--add`).previousElementSibling.querySelector('[data-detached="true"]');
+    }
+    if (cellElements.length === 1 && cellElements[0].dataset.detached === "true" && !cellElements[0].parentElement.dataset.id) {
+        return;
+    }
     const blockElement = hasClosestBlock(cellElements[0]);
     if (!blockElement) {
         return;
@@ -416,13 +431,16 @@ const updateCellValue = (protyle: IProtyle, type: TAVCol, cellElements: HTMLElem
             content: (avMaskElement.querySelector(".b3-text-field") as HTMLInputElement).value
         };
         const oldValue: { content: string | number, isNotEmpty?: boolean } = {
-            content: item.textContent.trim()
+            content: type === "block" ? item.firstElementChild.textContent.trim() : item.textContent.trim()
         };
         if (type === "number") {
             oldValue.content = parseFloat(oldValue.content as string);
             oldValue.isNotEmpty = !!oldValue.content;
             inputValue.content = parseFloat(inputValue.content as string);
             inputValue.isNotEmpty = !!inputValue.content;
+        }
+        if (objEquals(inputValue, oldValue)) {
+            return;
         }
         doOperations.push({
             action: "updateAttrViewCell",
@@ -446,7 +464,9 @@ const updateCellValue = (protyle: IProtyle, type: TAVCol, cellElements: HTMLElem
         });
         updateAttrViewCellAnimation(item);
     });
-    transaction(protyle, doOperations, undoOperations);
+    if (doOperations.length > 0) {
+        transaction(protyle, doOperations, undoOperations);
+    }
     setTimeout(() => {
         avMaskElement.remove();
     });

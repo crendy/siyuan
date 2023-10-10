@@ -225,7 +225,7 @@ export const openFileAttr = (attrs: IObject, focusName = "bookmark", protyle?: I
             </label>
             ${notifyHTML}
         </div>
-        <div data-type="NodeAttributeView" class="fn__none custom-attr" data-av-id="${attrs["custom-avs"]}" data-node-id="${attrs.id}"></div>
+        <div data-type="NodeAttributeView" class="fn__none custom-attr"></div>
         <div data-type="custom" class="fn__none custom-attr">
            ${customHTML}
            <div class="b3-label">
@@ -308,7 +308,7 @@ export const openFileAttr = (attrs: IObject, focusName = "bookmark", protyle?: I
                 });
                 const inputElement = addDialog.element.querySelector("input") as HTMLInputElement;
                 const btnsElement = addDialog.element.querySelectorAll(".b3-button");
-                dialog.bindInput(inputElement, () => {
+                addDialog.bindInput(inputElement, () => {
                     (btnsElement[1] as HTMLButtonElement).click();
                 });
                 inputElement.focus();
@@ -431,6 +431,7 @@ export const exportMd = (id: string) => {
         icon: "iconUpload",
         submenu: [{
             label: window.siyuan.languages.template,
+            iconClass: "ft__error",
             icon: "iconMarkdown",
             click: async () => {
                 const result = await fetchSyncPost("/api/block/getRefText", {id: id});
@@ -536,6 +537,7 @@ export const exportMd = (id: string) => {
                 }
             }, {
                 label: "HTML (SiYuan)",
+                iconClass: "ft__error",
                 icon: "iconHTML5",
                 click: () => {
                     saveExport({type: "html", id});
