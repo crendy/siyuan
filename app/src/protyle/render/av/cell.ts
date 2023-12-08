@@ -112,7 +112,7 @@ export const cellScrollIntoView = (blockElement: HTMLElement, cellElement: Eleme
         // 属性面板
         return;
     }
-    const avHeaderRect = blockElement.querySelector(".av__header").getBoundingClientRect();
+    const avHeaderRect = blockElement.querySelector(".av__row--header").getBoundingClientRect();
     if (avHeaderRect.bottom > cellRect.top) {
         const contentElement = hasClosestByClassName(blockElement, "protyle-content", true);
         if (contentElement) {
@@ -161,7 +161,7 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type
     }
     cellRect = cellElements[0].getBoundingClientRect();
     let html = "";
-    const style = `style="position:absolute;left: ${cellRect.left}px;top: ${cellRect.top}px;width:${Math.max(cellRect.width, 25)}px;height: ${cellRect.height}px"`;
+    const style = `style="padding-top: 6.5px;position:absolute;left: ${cellRect.left}px;top: ${cellRect.top}px;width:${Math.max(cellRect.width, 25)}px;height: ${cellRect.height}px"`;
     if (["text", "url", "email", "phone", "block", "template"].includes(type)) {
         html = `<textarea ${style} class="b3-text-field">${cellElements[0].firstElementChild.textContent}</textarea>`;
     } else if (type === "number") {
@@ -208,9 +208,19 @@ export const popTextCell = (protyle: IProtyle, cellElements: HTMLElement[], type
             if (event.isComposing) {
                 return;
             }
-            if (event.key === "Escape" ||
+            if (event.key === "Escape" || event.key === "Tab" ||
                 (event.key === "Enter" && !event.shiftKey && isNotCtrl(event))) {
                 updateCellValue(protyle, type, cellElements);
+                if (event.key === "Tab") {
+                    protyle.wysiwyg.element.dispatchEvent(new KeyboardEvent("keydown", {
+                        shiftKey: event.shiftKey,
+                        ctrlKey: event.ctrlKey,
+                        altKey: event.altKey,
+                        metaKey: event.metaKey,
+                        key: "Tab",
+                        keyCode: 9
+                    }));
+                }
                 event.preventDefault();
                 event.stopPropagation();
             }
@@ -294,9 +304,9 @@ const updateCellValue = (protyle: IProtyle, type: TAVCol, cellElements: HTMLElem
                 checked?: boolean,
             } = {};
             if (type === "number") {
-                oldValue.content = parseFloat(oldValue.content as string);
+                oldValue.content = parseFloat(item.textContent.trim());
                 oldValue.isNotEmpty = typeof oldValue.content === "number" && !isNaN(oldValue.content);
-                inputValue.content = parseFloat(inputValue.content as string);
+                inputValue.content = parseFloat((avMaskElement.querySelector(".b3-text-field") as HTMLInputElement).value);
                 inputValue.isNotEmpty = typeof inputValue.content === "number" && !isNaN(inputValue.content);
             } else if (type === "checkbox") {
                 const useElement = item.querySelector("use");

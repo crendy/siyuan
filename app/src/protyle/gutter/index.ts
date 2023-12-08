@@ -401,8 +401,8 @@ export class Gutter {
         label: string,
         protyle: IProtyle,
         selectsElement: Element[],
-        type: string,
-        level?: string
+        type: TTurnIntoOne,
+        level?: TTurnIntoOneSub
     }) {
         return {
             icon: options.icon,
@@ -419,8 +419,8 @@ export class Gutter {
         label: string,
         protyle: IProtyle,
         selectsElement: Element[],
-        type: string,
-        level?: number | string,
+        type: TTurnInto,
+        level?: number,
         isContinue?: boolean
         accelerator?: string
     }) {
@@ -627,11 +627,7 @@ export class Gutter {
                 let html = "";
                 selectsElement.forEach(item => {
                     item.querySelectorAll("[spellcheck]").forEach(editItem => {
-                        const cloneNode = editItem.cloneNode(true) as HTMLElement;
-                        cloneNode.querySelectorAll('[data-type="backslash"]').forEach(slashItem => {
-                            slashItem.firstElementChild.remove();
-                        });
-                        html += cloneNode.textContent + "\n";
+                        html += editItem.textContent + "\n";
                     });
                 });
                 copyPlainText(html.trimEnd());
@@ -900,7 +896,6 @@ export class Gutter {
                 accelerator: window.siyuan.config.keymap.editor.heading.paragraph.custom,
                 protyle,
                 selectsElement: [nodeElement],
-                level: 6,
                 type: "Blocks2Ps",
             }));
             if (subType !== "h1") {
@@ -1068,11 +1063,7 @@ export class Gutter {
             click() {
                 let text = "";
                 nodeElement.querySelectorAll("[spellcheck]").forEach(item => {
-                    const cloneNode = item.cloneNode(true) as HTMLElement;
-                    cloneNode.querySelectorAll('[data-type="backslash"]').forEach(slashItem => {
-                        slashItem.firstElementChild.remove();
-                    });
-                    text += cloneNode.textContent + "\n";
+                    text += item.textContent + "\n";
                 });
                 copyPlainText(text.trimEnd());
             }

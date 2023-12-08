@@ -240,18 +240,7 @@ const setHTML = (options: {
             protyle.breadcrumb.element.nextElementSibling.textContent = "";
         }
         protyle.element.removeAttribute("disabled-forever");
-        let readOnly = window.siyuan.config.readonly ? "true" : "false";
-        if (readOnly === "false") {
-            readOnly = protyle.wysiwyg.element.getAttribute(Constants.CUSTOM_SY_READONLY);
-            if (!readOnly) {
-                readOnly = window.siyuan.config.editor.readOnly ? "true" : "false";
-            }
-        }
-        if (readOnly === "true") {
-            disabledProtyle(protyle);
-        } else {
-            enableProtyle(protyle);
-        }
+        setReadonlyByConfig(protyle);
     }
     if (options.action.includes(Constants.CB_GET_SETID)) {
         // 点击大纲后，如果需要动态加载，在定位后，需要重置 block.id https://github.com/siyuan-note/siyuan/issues/4487
@@ -339,7 +328,7 @@ export const disabledProtyle = (protyle: IProtyle) => {
     });
     if (protyle.breadcrumb) {
         protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"] use').setAttribute("xlink:href", "#iconLock");
-        protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"]').setAttribute("aria-label", window.siyuan.languages.unlockEdit);
+        protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"]').setAttribute("aria-label", window.siyuan.config.editor.readOnly ? window.siyuan.languages.tempUnlock : window.siyuan.languages.unlockEdit);
     }
     hideTooltip();
 };
@@ -373,11 +362,10 @@ export const enableProtyle = (protyle: IProtyle) => {
     });
     if (protyle.breadcrumb) {
         protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"] use').setAttribute("xlink:href", "#iconUnlock");
-        protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"]').setAttribute("aria-label", window.siyuan.languages.lockEdit);
+        protyle.breadcrumb.element.parentElement.querySelector('[data-type="readonly"]').setAttribute("aria-label", window.siyuan.config.editor.readOnly ? window.siyuan.languages.cancelTempUnlock : window.siyuan.languages.lockEdit);
     }
     hideTooltip();
 };
-
 
 const focusElementById = (protyle: IProtyle, action: string[]) => {
     let focusElement: Element;
@@ -410,5 +398,20 @@ const focusElementById = (protyle: IProtyle, action: string[]) => {
             pushBack(protyle, undefined, protyle.wysiwyg.element.firstElementChild);
         }
         /// #endif
+    }
+};
+
+export const setReadonlyByConfig = (protyle: IProtyle) => {
+    let readOnly = window.siyuan.config.readonly ? "true" : "false";
+    if (readOnly === "false") {
+        readOnly = window.siyuan.config.editor.readOnly ? "true" : "false";
+        if (readOnly === "false") {
+            readOnly = protyle.wysiwyg.element.getAttribute(Constants.CUSTOM_SY_READONLY);
+        }
+    }
+    if (readOnly === "true") {
+        disabledProtyle(protyle);
+    } else {
+        enableProtyle(protyle);
     }
 };
