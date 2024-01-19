@@ -1,4 +1,4 @@
-import {exportLayout, JSONToLayout, resetLayout, resizeTopBar} from "../layout/util";
+import {adjustLayout, exportLayout, JSONToLayout, resetLayout, resizeTopBar} from "../layout/util";
 import {resizeTabs} from "../layout/tabUtil";
 import {setStorageVal} from "../protyle/util/compatibility";
 /// #if !BROWSER
@@ -14,7 +14,6 @@ import {fetchPost, fetchSyncPost} from "../util/fetch";
 import {addGA, initAssets, setInlineStyle} from "../util/assets";
 import {renderSnippet} from "../config/util/snippets";
 import {openFile, openFileById} from "../editor/util";
-import {focusByRange} from "../protyle/util/selection";
 import {exitSiYuan} from "../dialog/processSystem";
 import {isWindow} from "../util/functions";
 import {initStatus} from "../layout/status";
@@ -28,6 +27,7 @@ import {App} from "../index";
 import {initWindowEvent} from "./globalEvent/event";
 import {sendGlobalShortcut} from "./globalEvent/keydown";
 import {closeWindow} from "../window/closeWin";
+import {checkFold} from "../util/noRelyPCFunction";
 
 const matchKeymap = (keymap: Record<string, IKeymapItem>, key1: "general" | "editor", key2?: "general" | "insert" | "heading" | "list" | "table") => {
     if (key1 === "general") {
@@ -125,6 +125,9 @@ export const onGetConfig = (isStart: boolean, app: App) => {
         window.siyuan.emojis = response.data as IEmoji[];
         try {
             JSONToLayout(app, isStart);
+            setTimeout(() => {
+                adjustLayout();
+            }); // 等待 dock 中 !this.pin 的 setTimeout
             /// #if !BROWSER
             sendGlobalShortcut(app);
             /// #endif
@@ -144,6 +147,7 @@ export const onGetConfig = (isStart: boolean, app: App) => {
     window.addEventListener("resize", () => {
         window.clearTimeout(resizeTimeout);
         resizeTimeout = window.setTimeout(() => {
+            adjustLayout();
             resizeTabs();
             resizeTopBar();
         }, 200);
@@ -171,24 +175,10 @@ const winOnMaxRestore = async () => {
     /// #endif
 };
 
-const saveUI = () => {
-    exportLayout({
-        reload: false,
-        onlyData: false,
-        errorExit: false
-    });
-};
-
-export const unbindSaveUI = () => {
-    window.removeEventListener("beforeunload", saveUI);
-    window.removeEventListener("pagehide", saveUI);
-};
-
 export const initWindow = async (app: App) => {
     /// #if !BROWSER
     const winOnClose = (close = false) => {
         exportLayout({
-            reload: false,
             cb() {
                 if (window.siyuan.config.appearance.closeButtonBehavior === 1 && !close) {
                     // 最小化
@@ -203,7 +193,6 @@ export const initWindow = async (app: App) => {
                     exitSiYuan();
                 }
             },
-            onlyData: false,
             errorExit: true
         });
     };
@@ -211,20 +200,7 @@ export const initWindow = async (app: App) => {
     ipcRenderer.send(Constants.SIYUAN_EVENT, "onEvent");
     ipcRenderer.on(Constants.SIYUAN_EVENT, (event, cmd) => {
         if (cmd === "focus") {
-            if (getSelection().rangeCount > 0) {
-                const range = getSelection().getRangeAt(0);
-                const startNode = range.startContainer.childNodes[range.startOffset] as HTMLElement;
-                if (startNode && startNode.nodeType !== 3 && (startNode.tagName === "TEXTAREA" || startNode.tagName === "INPUT")) {
-                    startNode.focus();
-                } else {
-                    focusByRange(getSelection().getRangeAt(0));
-                }
-            }
-            exportLayout({
-                reload: false,
-                onlyData: false,
-                errorExit: false
-            });
+            // 由于 https://github.com/siyuan-note/siyuan/issues/10060 和新版 electron 应用切出再切进会保持光标，故移除 focus
             window.siyuan.altIsPressed = false;
             window.siyuan.ctrlIsPressed = false;
             window.siyuan.shiftIsPressed = false;
@@ -307,12 +283,12 @@ export const initWindow = async (app: App) => {
                 const focus = urlObj.searchParams.get("focus") === "1";
                 fetchPost("/api/block/checkBlockExist", {id}, existResponse => {
                     if (existResponse.data) {
-                        fetchPost("/api/block/checkBlockFold", {id}, (foldResponse) => {
+                        checkFold(id, (zoomIn) => {
                             openFileById({
                                 app,
                                 id,
-                                action: (foldResponse.data || focus) ? [Constants.CB_GET_FOCUS, Constants.CB_GET_ALL] : [Constants.CB_GET_FOCUS, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL],
-                                zoomIn: foldResponse.data || focus
+                                action: (zoomIn || focus) ? [Constants.CB_GET_FOCUS, Constants.CB_GET_ALL] : [Constants.CB_GET_FOCUS, Constants.CB_GET_CONTEXT, Constants.CB_GET_ROOTSCROLL],
+                                zoomIn: zoomIn || focus
                             });
                         });
                         ipcRenderer.send(Constants.SIYUAN_CMD, "show");
@@ -364,6 +340,7 @@ export const initWindow = async (app: App) => {
             removeAssets: ipcData.removeAssets,
             keepFold: ipcData.keepFold,
             mergeSubdocs: ipcData.mergeSubdocs,
+            watermark: ipcData.watermark,
             landscape: ipcData.pdfOptions.landscape,
             marginType: ipcData.pdfOptions.marginType,
             pageSize: ipcData.pdfOptions.pageSize,
@@ -403,6 +380,7 @@ ${response.data.replace("%pages", "<span class=totalPages></span>").replace("%pa
                     merge: ipcData.mergeSubdocs,
                     path: pdfFilePath,
                     removeAssets: ipcData.removeAssets,
+                    watermark: ipcData.watermark
                 }, () => {
                     afterExport(pdfFilePath, msgId);
                     if (ipcData.removeAssets) {
@@ -445,11 +423,12 @@ ${response.data.replace("%pages", "<span class=totalPages></span>").replace("%pa
 </div></div>`);
         const pinElement = document.getElementById("pinWindow");
         pinElement.addEventListener("click", () => {
-            pinElement.classList.toggle("toolbar__item--active");
-            if (pinElement.classList.contains("toolbar__item--active")) {
+            if (pinElement.getAttribute("aria-label") === window.siyuan.languages.pin) {
+                pinElement.querySelector("use").setAttribute("xlink:href", "#iconUnpin");
                 pinElement.setAttribute("aria-label", window.siyuan.languages.unpin);
                 ipcRenderer.send(Constants.SIYUAN_CMD, "setAlwaysOnTopTrue");
             } else {
+                pinElement.querySelector("use").setAttribute("xlink:href", "#iconPin");
                 pinElement.setAttribute("aria-label", window.siyuan.languages.pin);
                 ipcRenderer.send(Constants.SIYUAN_CMD, "setAlwaysOnTopFalse");
             }
@@ -523,7 +502,5 @@ ${response.data.replace("%pages", "<span class=totalPages></span>").replace("%pa
     if (!isWindow()) {
         document.querySelector(".toolbar").classList.add("toolbar--browser");
     }
-    window.addEventListener("beforeunload", saveUI, false);
-    window.addEventListener("pagehide", saveUI, false);
     /// #endif
 };

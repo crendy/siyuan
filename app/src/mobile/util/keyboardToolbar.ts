@@ -11,7 +11,8 @@ import {focusByRange, getSelectionPosition} from "../../protyle/util/selection";
 import {getCurrentEditor} from "../editor";
 import {fontEvent, getFontNodeElements} from "../../protyle/toolbar/Font";
 import {hideElements} from "../../protyle/ui/hideElements";
-import {input} from "../../protyle/wysiwyg/input";
+import {softEnter} from "../../protyle/wysiwyg/enter";
+import {isPaidUser} from "../../util/needSubscribe";
 
 let renderKeyboardToolbarTimeout: number;
 let showUtil = false;
@@ -203,6 +204,7 @@ const renderSlashMenu = (protyle: IProtyle, toolbarElement: Element) => {
     ${getSlashItem("((", "iconRef", window.siyuan.languages.ref, "true")}
     ${getSlashItem("{{", "iconSQL", window.siyuan.languages.blockEmbed, "true")}
     ${getSlashItem(Constants.ZWSP + 5, "iconSparkles", "AI Chat")}
+    ${isPaidUser() ? getSlashItem('<div data-type="NodeAttributeView" data-av-type="table"></div>', "iconDatabase", window.siyuan.languages.database, "true") : ""}
     ${getSlashItem(Constants.ZWSP + 4, "iconFile", window.siyuan.languages.newSubDoc)}
 </div>
 <div class="keyboard__slash-title"></div>
@@ -273,7 +275,7 @@ export const showKeyboardToolbarUtil = (oldScrollTop: number) => {
 
     const toolbarElement = document.getElementById("keyboardToolbar");
     let keyboardHeight = toolbarElement.getAttribute("data-keyboardheight");
-    keyboardHeight = (keyboardHeight ? (parseInt(keyboardHeight) + 42) : window.innerHeight / 2) + "px";
+    keyboardHeight = (keyboardHeight ? (parseInt(keyboardHeight) + 42) : window.outerHeight / 2) + "px";
     const editor = getCurrentEditor();
     if (editor) {
         editor.protyle.element.parentElement.style.paddingBottom = keyboardHeight;
@@ -308,8 +310,7 @@ const renderKeyboardToolbar = () => {
             window.screen.height - window.innerHeight < 160 ||  // reloadSync 会导致 selectionchange，从而导致键盘没有弹起的情况下出现工具栏
             !document.activeElement || (
                 document.activeElement &&
-                document.activeElement.tagName !== "INPUT" &&
-                document.activeElement.tagName !== "TEXTAREA" &&
+                !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) &&
                 !document.activeElement.classList.contains("protyle-wysiwyg") &&
                 document.activeElement.getAttribute("contenteditable") !== "true"
             )) {
@@ -318,8 +319,7 @@ const renderKeyboardToolbar = () => {
         }
         // 编辑器设置界面点击空白或关闭，焦点不知何故会飘移到编辑器上
         if (document.activeElement &&
-            document.activeElement.tagName !== "INPUT" &&
-            document.activeElement.tagName !== "TEXTAREA" && (
+            !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName) && (
                 document.getElementById("menu").style.transform === "translateX(0px)" ||
                 document.getElementById("model").style.transform === "translateY(0px)"
             )) {
@@ -366,11 +366,9 @@ const renderKeyboardToolbar = () => {
                 if (nodeElement.parentElement.classList.contains("li")) {
                     outdentElement.classList.remove("fn__none");
                     outdentElement.nextElementSibling.classList.remove("fn__none");
-                    outdentElement.nextElementSibling.nextElementSibling.classList.remove("fn__none");
                 } else {
                     outdentElement.classList.add("fn__none");
                     outdentElement.nextElementSibling.classList.add("fn__none");
-                    outdentElement.nextElementSibling.nextElementSibling.classList.add("fn__none");
                 }
             }
         }
@@ -419,12 +417,13 @@ export const showKeyboardToolbar = () => {
     setTimeout(() => {
         const contentElement = hasClosestByClassName(range.startContainer, "protyle-content", true);
         if (contentElement) {
-            const cursorTop = getSelectionPosition(contentElement).top - contentElement.getBoundingClientRect().top;
-            if (cursorTop < window.innerHeight - 118.5) {   // 118: contentElement.getBoundingClientRect().top + toolbarElement.clientHeight
+            const contentTop = contentElement.getBoundingClientRect().top;
+            const cursorTop = getSelectionPosition(contentElement).top;
+            if (cursorTop < window.innerHeight - 42 && cursorTop > contentTop) {
                 return;
             }
             contentElement.scroll({
-                top: contentElement.scrollTop + cursorTop - ((window.outerHeight - 118.5) / 2 - 26),
+                top: contentElement.scrollTop + cursorTop - window.innerHeight + 42 + 26,
                 left: contentElement.scrollLeft,
                 behavior: "smooth"
             });
@@ -471,20 +470,18 @@ export const initKeyboardToolbar = () => {
     toolbarElement.innerHTML = `<div class="fn__flex keyboard__bar">
     <div class="fn__flex-1">
         <div class="fn__none keyboard__dynamic">
-            <button class="keyboard__action" data-type="outdent"><svg><use xlink:href="#iconOutdent"></use></svg></button>
-            <button class="keyboard__action" data-type="indent"><svg><use xlink:href="#iconIndent"></use></svg></button>
-            <span class="keyboard__split"></span>
             <button class="keyboard__action" data-type="add"><svg><use xlink:href="#iconAdd"></use></svg></button>
+            <button class="keyboard__action" data-type="block"><svg><use xlink:href="#iconParagraph"></use></svg></button>
             <button class="keyboard__action" data-type="goinline"><svg class="keyboard__svg--big"><use xlink:href="#iconBIU"></use></svg></button>
+            <button class="keyboard__action" data-type="softLine"><svg><use xlink:href="#iconSoftWrap"></use></svg></button>
             <span class="keyboard__split"></span>
             <button class="keyboard__action" data-type="undo"><svg><use xlink:href="#iconUndo"></use></svg></button>
             <button class="keyboard__action" data-type="redo"><svg><use xlink:href="#iconRedo"></use></svg></button>
-            <button class="keyboard__action" data-type="block"><svg><use xlink:href="#iconParagraph"></use></svg></button>
-            <button class="keyboard__action" data-type="more"><svg><use xlink:href="#iconMore"></use></svg></button>
             <span class="keyboard__split"></span>
+            <button class="keyboard__action" data-type="outdent"><svg><use xlink:href="#iconOutdent"></use></svg></button>
+            <button class="keyboard__action" data-type="indent"><svg><use xlink:href="#iconIndent"></use></svg></button>
             <button class="keyboard__action" data-type="moveup"><svg><use xlink:href="#iconUp"></use></svg></button>
             <button class="keyboard__action" data-type="movedown"><svg><use xlink:href="#iconDown"></use></svg></button>
-            <button class="keyboard__action" data-type="softLine"><svg><use xlink:href="#iconArrowDown"></use></svg></button>
         </div>
         <div class="fn__none keyboard__dynamic">
             <button class="keyboard__action" data-type="goback"><svg><use xlink:href="#iconBack"></use></svg></button>
@@ -634,9 +631,9 @@ export const initKeyboardToolbar = () => {
             focusByRange(range);
             return;
         } else if (type === "softLine") {
-            range.insertNode(document.createTextNode("\n"));
-            range.collapse(false);
-            input(protyle, nodeElement, range);
+            range.extractContents();
+            softEnter(range, nodeElement, protyle);
+            focusByRange(range);
             return;
         } else if (type === "add") {
             if (buttonElement.classList.contains("protyle-toolbar__item--current")) {
@@ -649,15 +646,6 @@ export const initKeyboardToolbar = () => {
                 renderSlashMenu(protyle, toolbarElement);
                 showKeyboardToolbarUtil(oldScrollTop);
             }
-            return;
-        } else if (type === "more") {
-            protyle.breadcrumb.showMenu(protyle, {
-                x: 0,
-                y: 0,
-                isLeft: true
-            });
-            activeBlur();
-            hideKeyboardToolbar();
             return;
         } else if (type === "block") {
             protyle.gutter.renderMenu(protyle, nodeElement);

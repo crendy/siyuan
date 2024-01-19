@@ -66,7 +66,7 @@ func SetBlockReminder(id string, timed string) (err error) {
 	if ast.NodeDocument != node.Type && node.IsContainerBlock() {
 		node = treenode.FirstLeafBlock(node)
 	}
-	content := treenode.NodeStaticContent(node, nil, false, false)
+	content := treenode.NodeStaticContent(node, nil, false, false, false)
 	content = gulu.Str.SubStr(content, 128)
 	err = SetCloudBlockReminder(id, content, timedMills)
 	if nil != err {
@@ -122,15 +122,8 @@ func setNodeAttrs(node *ast.Node, tree *parse.Tree, nameValues map[string]string
 		return
 	}
 
-	if 1 == len(nameValues) && "" != nameValues["scroll"] {
-		// 文档滚动状态不产生同步冲突 https://github.com/siyuan-note/siyuan/issues/6076
-		if err = indexWriteJSONQueueWithoutChangeTime(tree); nil != err {
-			return
-		}
-	} else {
-		if err = indexWriteJSONQueue(tree); nil != err {
-			return
-		}
+	if err = indexWriteJSONQueue(tree); nil != err {
+		return
 	}
 
 	IncSync()
