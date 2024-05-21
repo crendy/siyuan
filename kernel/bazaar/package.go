@@ -121,11 +121,12 @@ type StagePackage struct {
 }
 
 type StageRepo struct {
-	URL        string `json:"url"`
-	Updated    string `json:"updated"`
-	Stars      int    `json:"stars"`
-	OpenIssues int    `json:"openIssues"`
-	Size       int64  `json:"size"`
+	URL         string `json:"url"`
+	Updated     string `json:"updated"`
+	Stars       int    `json:"stars"`
+	OpenIssues  int    `json:"openIssues"`
+	Size        int64  `json:"size"`
+	InstallSize int64  `json:"installSize"`
 
 	Package *StagePackage `json:"package"`
 }
@@ -505,14 +506,22 @@ func GetPackageREADME(repoURL, repoHash, packageType string) (ret string) {
 
 	data, err := downloadPackage(repoURLHash+"/"+readme, false, "")
 	if nil != err {
-		ret = "Load bazaar package's README.md failed: " + err.Error()
-		return
+		ret = fmt.Sprintf("Load bazaar package's README.md(%s) failed: %s", readme, err.Error())
+		if readme == repo.Package.Readme.Default || "" == strings.TrimSpace(repo.Package.Readme.Default) {
+			return
+		}
+		readme = repo.Package.Readme.Default
+		data, err = downloadPackage(repoURLHash+"/"+readme, false, "")
+		if nil != err {
+			ret += fmt.Sprintf("<br>Load bazaar package's README.md(%s) failed: %s", readme, err.Error())
+			return
+		}
 	}
 
 	if 2 < len(data) {
 		if 255 == data[0] && 254 == data[1] {
 			data, _, err = transform.Bytes(textUnicode.UTF16(textUnicode.LittleEndian, textUnicode.ExpectBOM).NewDecoder(), data)
-		} else if 254 == data[1] && 255 == data[0] {
+		} else if 254 == data[0] && 255 == data[1] {
 			data, _, err = transform.Bytes(textUnicode.UTF16(textUnicode.BigEndian, textUnicode.ExpectBOM).NewDecoder(), data)
 		}
 	}
@@ -554,7 +563,7 @@ func downloadPackage(repoURLHash string, pushProgress bool, systemID string) (da
 	repoURLHash = strings.TrimPrefix(repoURLHash, "https://github.com/")
 	u := util.BazaarOSSServer + "/package/" + repoURLHash
 	buf := &bytes.Buffer{}
-	resp, err := httpclient.NewBrowserRequest().SetOutput(buf).SetDownloadCallback(func(info req.DownloadInfo) {
+	resp, err := httpclient.NewCloudFileRequest2m().SetOutput(buf).SetDownloadCallback(func(info req.DownloadInfo) {
 		if pushProgress {
 			progress := float32(info.DownloadedSize) / float32(info.Response.ContentLength)
 			//logging.LogDebugf("downloading bazaar package [%f]", progress)
@@ -703,3 +712,5 @@ func disallowDisplayBazaarPackage(pkg *Package) bool {
 }
 
 var packageCache = gcache.New(6*time.Hour, 30*time.Minute) // [repoURL]*Package
+
+var packageInstallSizeCache = gcache.New(48*time.Hour, 6*time.Hour) // [repoURL]*int64

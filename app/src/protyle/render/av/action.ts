@@ -5,38 +5,37 @@ import {openEditorTab} from "../../../menus/util";
 import {copySubMenu} from "../../../menus/commonMenuItem";
 import {
     addDragFill,
+    genCellValueByElement,
     getCellText,
     getTypeByCellElement,
     popTextCell,
     renderCell,
-    renderCellAttr, updateCellsValue,
+    renderCellAttr,
+    updateCellsValue,
     updateHeaderCell
 } from "./cell";
-import {getColIconByType, showColMenu} from "./col";
-import {deleteRow, insertRows, setPageSize, updateHeader} from "./row";
+import {addCol, getColIconByType, showColMenu} from "./col";
+import {deleteRow, insertRows, selectRow, setPageSize, updateHeader} from "./row";
 import {emitOpenMenu} from "../../../plugin/EventBus";
-import {addCol} from "./col";
 import {openMenuPanel} from "./openMenuPanel";
 import {hintRef} from "../../hint/extend";
 import {focusByRange} from "../../util/selection";
 import {showMessage} from "../../../dialog/message";
 import {previewImage} from "../../preview/image";
-import {pathPosix} from "../../../util/pathName";
-import {Constants} from "../../../constants";
-/// #if !MOBILE
-import {openAsset, openBy} from "../../../editor/util";
-/// #endif
-import {getSearch} from "../../../util/functions";
 import {unicode2Emoji} from "../../../emoji";
-import {selectRow} from "./row";
 import * as dayjs from "dayjs";
 import {openCalcMenu} from "./calc";
 import {avRender} from "./render";
 import {addView, openViewMenu} from "./view";
-import {isOnlyMeta, openByMobile, writeText} from "../../util/compatibility";
+import {isOnlyMeta, writeText} from "../../util/compatibility";
 import {openSearchAV} from "./relation";
+import {Constants} from "../../../constants";
+import {hideElements} from "../../ui/hideElements";
 
 export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLElement }) => {
+    if (isOnlyMeta(event)) {
+        return false;
+    }
     const blockElement = hasClosestBlock(event.target);
     if (!blockElement) {
         return false;
@@ -55,55 +54,6 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
     if (firstColElement) {
         window.siyuan.menus.menu.remove();
         selectRow(firstColElement, "toggle");
-        event.preventDefault();
-        event.stopPropagation();
-        return true;
-    }
-    const urlElement = hasClosestByClassName(event.target, "av__celltext--url");
-    if (urlElement) {
-        let linkAddress = urlElement.textContent.trim();
-        if (urlElement.dataset.type === "phone") {
-            linkAddress = "tel:" + linkAddress;
-        } else if (urlElement.dataset.type === "email") {
-            linkAddress = "mailto:" + linkAddress;
-        } else if (urlElement.classList.contains("b3-chip")) {
-            linkAddress = urlElement.dataset.url;
-        }
-        /// #if !MOBILE
-        const suffix = pathPosix().extname(linkAddress);
-        const ctrlIsPressed = isOnlyMeta(event);
-        if (Constants.SIYUAN_ASSETS_EXTS.includes(suffix)) {
-            if (event.altKey) {
-                openAsset(protyle.app, linkAddress.trim(), parseInt(getSearch("page", linkAddress)));
-            } else if (ctrlIsPressed) {
-                /// #if !BROWSER
-                openBy(linkAddress, "folder");
-                /// #else
-                openByMobile(linkAddress);
-                /// #endif
-            } else if (event.shiftKey) {
-                /// #if !BROWSER
-                openBy(linkAddress, "app");
-                /// #else
-                openByMobile(linkAddress);
-                /// #endif
-            } else {
-                openAsset(protyle.app, linkAddress.trim(), parseInt(getSearch("page", linkAddress)), "right");
-            }
-        } else {
-            /// #if !BROWSER
-            if (ctrlIsPressed) {
-                openBy(linkAddress, "folder");
-            } else {
-                openBy(linkAddress, "app");
-            }
-            /// #else
-            openByMobile(linkAddress);
-            /// #endif
-        }
-        /// #else
-        openByMobile(linkAddress);
-        /// #endif
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -139,7 +89,9 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
         searchElement.style.width = "128px";
         searchElement.style.paddingLeft = "";
         searchElement.style.paddingRight = "";
-        searchElement.focus();
+        setTimeout(() => {
+            searchElement.focus();
+        }, Constants.TIMEOUT_TRANSITION);
         event.preventDefault();
         event.stopPropagation();
         return true;
@@ -213,9 +165,12 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
             event.stopPropagation();
             return true;
         } else if (type === "block-more") {
+            window.siyuan.menus.menu.remove();
             protyle.toolbar.range = document.createRange();
             protyle.toolbar.range.selectNodeContents(target);
             focusByRange(protyle.toolbar.range);
+            target.parentElement.classList.add("av__cell--select");
+            addDragFill(target.parentElement);
             hintRef(target.previousElementSibling.textContent.trim(), protyle, "av");
             event.preventDefault();
             event.stopPropagation();
@@ -278,6 +233,7 @@ export const avClick = (protyle: IProtyle, event: MouseEvent & { target: HTMLEle
 };
 
 export const avContextmenu = (protyle: IProtyle, rowElement: HTMLElement, position: IPosition) => {
+    hideElements(["hint"], protyle);
     if (rowElement.classList.contains("av__row--header")) {
         return false;
     }
@@ -309,30 +265,42 @@ export const avContextmenu = (protyle: IProtyle, rowElement: HTMLElement, positi
     const keyCellElement = rowElements[0].querySelector(".av__cell[data-block-id]") as HTMLElement;
     if (rowElements.length === 1 && keyCellElement.getAttribute("data-detached") !== "true") {
         const blockId = rowElements[0].getAttribute("data-id");
-        openEditorTab(protyle.app, blockId);
+        openEditorTab(protyle.app, [blockId]);
         menu.addItem({
             label: window.siyuan.languages.copy,
             icon: "iconCopy",
             type: "submenu",
             submenu: copySubMenu(blockId)
         });
+    }
+    if (!protyle.disabled) {
         menu.addItem({
             label: window.siyuan.languages.addToDatabase,
             icon: "iconDatabase",
             click() {
                 openSearchAV(blockElement.getAttribute("data-av-id"), rowElements[0] as HTMLElement, (listItemElement) => {
-                    const sourceIds: string[] = [blockId];
+                    const srcs: IOperationSrcs[] = [];
+                    const sourceIds: string[] = [];
+                    rowElements.forEach(item => {
+                        const rowId = item.getAttribute("data-id");
+                        const blockValue = genCellValueByElement("block", item.querySelector(".av__cell[data-block-id]"));
+                        srcs.push({
+                            content: blockValue.block.content,
+                            id: rowId,
+                            isDetached: blockValue.isDetached,
+                        });
+                        sourceIds.push(rowId);
+                    });
                     const avID = listItemElement.dataset.avId;
                     transaction(protyle, [{
                         action: "insertAttrViewBlock",
                         avID,
                         ignoreFillFilter: true,
-                        srcIDs: sourceIds,
-                        isDetached: false,
-                        blockID: listItemElement.dataset.nodeId
+                        srcs,
+                        blockID: listItemElement.dataset.blockId
                     }, {
                         action: "doUpdateUpdated",
-                        id: listItemElement.dataset.nodeId,
+                        id: listItemElement.dataset.blockId,
                         data: dayjs().format("YYYYMMDDHHmmss"),
                     }], [{
                         action: "removeAttrViewBlock",
@@ -342,15 +310,6 @@ export const avContextmenu = (protyle: IProtyle, rowElement: HTMLElement, positi
                 });
             }
         });
-        menu.addItem({
-            label: window.siyuan.languages.unbindBlock,
-            icon: "iconLinkOff",
-            click() {
-                updateCellsValue(protyle, blockElement, keyCellElement.querySelector(".av__celltext").textContent, [keyCellElement]);
-            }
-        });
-    }
-    if (!protyle.disabled) {
         if (rowElements.length === 1) {
             if (keyCellElement.getAttribute("data-detached") !== "true") {
                 menu.addSeparator();
@@ -358,7 +317,7 @@ export const avContextmenu = (protyle: IProtyle, rowElement: HTMLElement, positi
             menu.addItem({
                 icon: "iconBefore",
                 label: `<div class="fn__flex" style="align-items: center;">
-${window.siyuan.languages.insertRowBefore.replace("${x}", '<span class="fn__space"></span><input style="width:64px" type="number" step="1" min="1" value="1" placeholder="Enter" class="b3-text-field"><span class="fn__space"></span>')}
+${window.siyuan.languages.insertRowBefore.replace("${x}", '<span class="fn__space"></span><input style="width:64px" type="number" step="1" min="1" value="1" placeholder="${window.siyuan.languages.enterKey}" class="b3-text-field"><span class="fn__space"></span>')}
 </div>`,
                 bind(element) {
                     const inputElement = element.querySelector("input");
@@ -380,7 +339,7 @@ ${window.siyuan.languages.insertRowBefore.replace("${x}", '<span class="fn__spac
             menu.addItem({
                 icon: "iconAfter",
                 label: `<div class="fn__flex" style="align-items: center;">
-${window.siyuan.languages.insertRowAfter.replace("${x}", '<span class="fn__space"></span><input style="width:64px" type="number" step="1" min="1" placeholder="Enter" class="b3-text-field" value="1"><span class="fn__space"></span>')}
+${window.siyuan.languages.insertRowAfter.replace("${x}", '<span class="fn__space"></span><input style="width:64px" type="number" step="1" min="1" placeholder="${window.siyuan.languages.enterKey}" class="b3-text-field" value="1"><span class="fn__space"></span>')}
 </div>`,
                 bind(element) {
                     const inputElement = element.querySelector("input");
@@ -400,6 +359,15 @@ ${window.siyuan.languages.insertRowAfter.replace("${x}", '<span class="fn__space
                 }
             });
             menu.addSeparator();
+            if (keyCellElement.getAttribute("data-detached") !== "true") {
+                menu.addItem({
+                    label: window.siyuan.languages.unbindBlock,
+                    icon: "iconLinkOff",
+                    click() {
+                        updateCellsValue(protyle, blockElement, keyCellElement.querySelector(".av__celltext").textContent, [keyCellElement]);
+                    }
+                });
+            }
         }
         menu.addItem({
             icon: "iconTrashcan",

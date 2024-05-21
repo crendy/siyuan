@@ -52,14 +52,21 @@ export const openMenuPanel = (options: {
         avPanelElement.remove();
         return;
     }
-    window.siyuan.menus.menu.remove();
     const avID = options.blockElement.getAttribute("data-av-id");
-    const blockID = options.blockElement.getAttribute("data-node-id");
     fetchPost("/api/av/renderAttributeView", {
         id: avID,
+        query: (options.blockElement.querySelector('[data-type="av-search"]') as HTMLInputElement)?.value || "",
         pageSize: parseInt(options.blockElement.getAttribute("data-page-size")) || undefined,
         viewID: options.blockElement.getAttribute(Constants.CUSTOM_SY_AV_VIEW)
     }, (response) => {
+        avPanelElement = document.querySelector(".av__panel");
+        if (avPanelElement) {
+            avPanelElement.remove();
+            return;
+        }
+        window.siyuan.menus.menu.remove();
+        const blockID = options.blockElement.getAttribute("data-node-id");
+
         const isCustomAttr = !options.blockElement.classList.contains("av");
         const data = response.data as IAV;
         let html;
@@ -74,7 +81,7 @@ export const openMenuPanel = (options: {
         } else if (options.type === "filters") {
             html = getFiltersHTML(data.view);
         } else if (options.type === "select") {
-            html = getSelectHTML(data.view, options.cellElements);
+            html = getSelectHTML(data.view, options.cellElements, true);
         } else if (options.type === "asset") {
             html = getAssetHTML(options.cellElements);
         } else if (options.type === "edit") {
@@ -131,7 +138,6 @@ export const openMenuPanel = (options: {
             } else if (options.type === "asset") {
                 bindAssetEvent({
                     protyle: options.protyle,
-                    data,
                     menuElement,
                     cellElements: options.cellElements,
                     blockElement: options.blockElement
@@ -176,6 +182,11 @@ export const openMenuPanel = (options: {
             return;
         });
         avPanelElement.addEventListener("drop", (event) => {
+            if (!window.siyuan.dragElement) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
             window.siyuan.dragElement.style.opacity = "";
             const sourceElement = window.siyuan.dragElement;
             window.siyuan.dragElement = undefined;
@@ -308,7 +319,6 @@ export const openMenuPanel = (options: {
                 });
                 updateAssetCell({
                     protyle: options.protyle,
-                    data,
                     cellElements: options.cellElements,
                     replaceValue,
                     blockElement: options.blockElement
@@ -389,40 +399,51 @@ export const openMenuPanel = (options: {
                 return;
             }
 
-            transaction(options.protyle, [{
-                action: "sortAttrViewCol",
-                avID,
-                previousID: (targetElement.classList.contains("dragover__top") ? targetElement.previousElementSibling?.getAttribute("data-id") : targetElement.getAttribute("data-id")) || "",
-                id: sourceId,
-                blockID,
-            }], [{
-                action: "sortAttrViewCol",
-                avID,
-                previousID: sourceElement.previousElementSibling?.getAttribute("data-id") || "",
-                id: sourceId,
-                blockID
-            }]);
-            let column: IAVColumn;
-            data.view.columns.find((item, index: number) => {
-                if (item.id === sourceId) {
-                    column = data.view.columns.splice(index, 1)[0];
-                    return true;
+            if (targetElement.getAttribute("data-type") === "editCol") {
+                const previousID = (targetElement.classList.contains("dragover__top") ? targetElement.previousElementSibling?.getAttribute("data-id") : targetElement.getAttribute("data-id")) || "";
+                const undoPreviousID = sourceElement.previousElementSibling?.getAttribute("data-id") || "";
+                if (previousID !== undoPreviousID && previousID !== sourceId) {
+                    transaction(options.protyle, [{
+                        action: "sortAttrViewCol",
+                        avID,
+                        previousID,
+                        id: sourceId,
+                        blockID,
+                    }], [{
+                        action: "sortAttrViewCol",
+                        avID,
+                        previousID: undoPreviousID,
+                        id: sourceId,
+                        blockID
+                    }]);
+                    let column: IAVColumn;
+                    data.view.columns.find((item, index: number) => {
+                        if (item.id === sourceId) {
+                            column = data.view.columns.splice(index, 1)[0];
+                            return true;
+                        }
+                    });
+                    data.view.columns.find((item, index: number) => {
+                        if (item.id === targetId) {
+                            if (isTop) {
+                                data.view.columns.splice(index, 0, column);
+                            } else {
+                                data.view.columns.splice(index + 1, 0, column);
+                            }
+                            return true;
+                        }
+                    });
                 }
-            });
-            data.view.columns.find((item, index: number) => {
-                if (item.id === targetId) {
-                    if (isTop) {
-                        data.view.columns.splice(index, 0, column);
-                    } else {
-                        data.view.columns.splice(index + 1, 0, column);
-                    }
-                    return true;
-                }
-            });
-            menuElement.innerHTML = getPropertiesHTML(data.view);
+                menuElement.innerHTML = getPropertiesHTML(data.view);
+                return;
+            }
         });
         let dragoverElement: HTMLElement;
         avPanelElement.addEventListener("dragover", (event: DragEvent) => {
+            if (event.dataTransfer.types.includes("Files")) {
+                event.preventDefault();
+                return;
+            }
             const target = event.target as HTMLElement;
             let targetElement = hasClosestByAttribute(target, "draggable", "true");
             if (!targetElement) {
@@ -841,6 +862,7 @@ export const openMenuPanel = (options: {
                 } else if (type === "updateColType") {
                     if (target.dataset.newType !== target.dataset.oldType) {
                         const name = (avPanelElement.querySelector('.b3-text-field[data-type="name"]') as HTMLInputElement).value;
+                        data.view.columns.find((item: IAVColumn) => item.id === options.colId).type = target.dataset.newType as TAVCol;
                         transaction(options.protyle, [{
                             action: "updateAttrViewCol",
                             id: options.colId,
@@ -892,10 +914,16 @@ export const openMenuPanel = (options: {
                                     blockID
                                 }]);
                             }
-
                         }
                     }
-                    avPanelElement.remove();
+                    menuElement.innerHTML = getEditHTML({
+                        protyle: options.protyle,
+                        data,
+                        colId: options.colId,
+                        isCustomAttr
+                    });
+                    bindEditEvent({protyle: options.protyle, data, menuElement, isCustomAttr, blockID});
+                    setPosition(menuElement, tabRect.right - menuElement.clientWidth, tabRect.bottom, tabRect.height);
                     event.preventDefault();
                     event.stopPropagation();
                     break;
@@ -910,7 +938,7 @@ export const openMenuPanel = (options: {
                     event.stopPropagation();
                     break;
                 } else if (type === "goSearchAV") {
-                    openSearchAV(avID, target);
+                    openSearchAV(avID, target, undefined, false);
                     event.preventDefault();
                     event.stopPropagation();
                     break;
@@ -1099,7 +1127,7 @@ export const openMenuPanel = (options: {
                     break;
                 } else if (type === "addColOptionOrCell") {
                     if (target.querySelector(".b3-menu__checked")) {
-                        removeCellOption(options.protyle, data, options.cellElements, menuElement.querySelector(`.b3-chips .b3-chip[data-content="${escapeAttr(target.dataset.name)}"]`), options.blockElement);
+                        removeCellOption(options.protyle, options.cellElements, menuElement.querySelector(`.b3-chips .b3-chip[data-content="${escapeAttr(target.dataset.name)}"]`), options.blockElement);
                     } else {
                         addColOptionOrCell(options.protyle, data, options.cellElements, target, menuElement, options.blockElement);
                     }
@@ -1108,12 +1136,12 @@ export const openMenuPanel = (options: {
                     event.stopPropagation();
                     break;
                 } else if (type === "removeCellOption") {
-                    removeCellOption(options.protyle, data, options.cellElements, target.parentElement, options.blockElement);
+                    removeCellOption(options.protyle, options.cellElements, target.parentElement, options.blockElement);
                     event.preventDefault();
                     event.stopPropagation();
                     break;
                 } else if (type === "addAssetLink") {
-                    addAssetLink(options.protyle, data, options.cellElements, target, options.blockElement);
+                    addAssetLink(options.protyle, options.cellElements, target, options.blockElement);
                     event.preventDefault();
                     event.stopPropagation();
                     break;
@@ -1141,7 +1169,6 @@ export const openMenuPanel = (options: {
                         }
                         updateAssetCell({
                             protyle: options.protyle,
-                            data,
                             cellElements: options.cellElements,
                             addValue: [value],
                             blockElement: options.blockElement
@@ -1177,7 +1204,16 @@ export const openMenuPanel = (options: {
                     event.stopPropagation();
                     break;
                 } else if (type === "editAssetItem") {
-                    editAssetItem(options.protyle, data, options.cellElements, target.parentElement, options.blockElement);
+                    editAssetItem({
+                        protyle: options.protyle,
+                        cellElements: options.cellElements,
+                        blockElement: options.blockElement,
+                        content: target.parentElement.dataset.content,
+                        type: target.parentElement.dataset.type as "image" | "file",
+                        name: target.parentElement.dataset.name,
+                        index: parseInt(target.parentElement.dataset.index),
+                        rect: target.parentElement.getBoundingClientRect()
+                    });
                     event.preventDefault();
                     event.stopPropagation();
                     break;
@@ -1230,6 +1266,10 @@ export const openMenuPanel = (options: {
                     }
                     event.preventDefault();
                     event.stopPropagation();
+                    break;
+                }
+                // 有错误日志，没找到重现步骤，需先判断一下
+                if (!target || !target.parentElement) {
                     break;
                 }
                 target = target.parentElement;

@@ -35,6 +35,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/88250/lute"
 	"github.com/88250/lute/ast"
+	"github.com/88250/lute/html"
 	"github.com/88250/lute/lex"
 	"github.com/88250/lute/parse"
 	"github.com/88250/vitess-sqlparser/sqlparser"
@@ -522,16 +523,20 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 			title := node.IALAttr("title")
 			if 0 == method {
 				if strings.Contains(title, keyword) {
-					renameRootTitles[node.ID] = strings.ReplaceAll(title, keyword, replacement)
+					docTitleReplacement := strings.ReplaceAll(replacement, "/", "")
+					renameRootTitles[node.ID] = strings.ReplaceAll(title, keyword, docTitleReplacement)
 					renameRoots = append(renameRoots, node)
 				}
 			} else if 3 == method {
 				if nil != r && r.MatchString(title) {
-					renameRootTitles[node.ID] = r.ReplaceAllString(title, replacement)
+					docTitleReplacement := strings.ReplaceAll(replacement, "/", "")
+					renameRootTitles[node.ID] = r.ReplaceAllString(title, docTitleReplacement)
 					renameRoots = append(renameRoots, node)
 				}
 			}
 		} else {
+			luteEngine := util.NewLute()
+			var unlinks []*ast.Node
 			ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 				if !entering {
 					return ast.WalkContinue
@@ -543,7 +548,9 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 						return ast.WalkContinue
 					}
 
-					replaceNodeTokens(n, method, keyword, replacement, r)
+					if replaceTextNode(n, method, keyword, replacement, r, luteEngine) {
+						unlinks = append(unlinks, n)
+					}
 				case ast.NodeLinkDest:
 					if !replaceTypes["imgSrc"] {
 						return ast.WalkContinue
@@ -637,55 +644,55 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "em")
 					} else if n.IsTextMarkType("strong") {
 						if !replaceTypes["strong"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "strong")
 					} else if n.IsTextMarkType("kbd") {
 						if !replaceTypes["kbd"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "kbd")
 					} else if n.IsTextMarkType("mark") {
 						if !replaceTypes["mark"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "mark")
 					} else if n.IsTextMarkType("s") {
 						if !replaceTypes["s"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "s")
 					} else if n.IsTextMarkType("sub") {
 						if !replaceTypes["sub"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "sub")
 					} else if n.IsTextMarkType("sup") {
 						if !replaceTypes["sup"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "sup")
 					} else if n.IsTextMarkType("tag") {
 						if !replaceTypes["tag"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "tag")
 					} else if n.IsTextMarkType("u") {
 						if !replaceTypes["u"] {
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "u")
 					} else if n.IsTextMarkType("inline-math") {
 						if !replaceTypes["inlineMath"] {
 							return ast.WalkContinue
@@ -720,11 +727,15 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 							return ast.WalkContinue
 						}
 
-						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r)
+						replaceNodeTextMarkTextContent(n, method, keyword, replacement, r, "text")
 					}
 				}
 				return ast.WalkContinue
 			})
+
+			for _, unlink := range unlinks {
+				unlink.Unlink()
+			}
 
 			if err = writeTreeUpsertQueue(tree); nil != err {
 				return
@@ -751,8 +762,13 @@ func FindReplace(keyword, replacement string, replaceTypes map[string]bool, ids 
 	return
 }
 
-func replaceNodeTextMarkTextContent(n *ast.Node, method int, keyword string, replacement string, r *regexp.Regexp) {
+func replaceNodeTextMarkTextContent(n *ast.Node, method int, keyword string, replacement string, r *regexp.Regexp, typ string) {
 	if 0 == method {
+		if "tag" == typ {
+			keyword = strings.TrimPrefix(keyword, "#")
+			keyword = strings.TrimSuffix(keyword, "#")
+		}
+
 		if strings.Contains(n.TextMarkTextContent, keyword) {
 			n.TextMarkTextContent = strings.ReplaceAll(n.TextMarkTextContent, keyword, replacement)
 		}
@@ -761,6 +777,50 @@ func replaceNodeTextMarkTextContent(n *ast.Node, method int, keyword string, rep
 			n.TextMarkTextContent = r.ReplaceAllString(n.TextMarkTextContent, replacement)
 		}
 	}
+}
+
+// replaceTextNode 替换文本节点为其他节点。
+// Supports replacing text elements with other elements https://github.com/siyuan-note/siyuan/issues/11058
+func replaceTextNode(text *ast.Node, method int, keyword string, replacement string, r *regexp.Regexp, luteEngine *lute.Lute) bool {
+	if 0 == method {
+		if bytes.Contains(text.Tokens, []byte(keyword)) {
+			newContent := bytes.ReplaceAll(text.Tokens, []byte(keyword), []byte(replacement))
+			tree := parse.Inline("", newContent, luteEngine.ParseOptions)
+			if nil == tree.Root.FirstChild {
+				return false
+			}
+			parse.NestedInlines2FlattedSpans(tree, false)
+
+			var replaceNodes []*ast.Node
+			for rNode := tree.Root.FirstChild.FirstChild; nil != rNode; rNode = rNode.Next {
+				replaceNodes = append(replaceNodes, rNode)
+			}
+
+			for _, rNode := range replaceNodes {
+				text.InsertBefore(rNode)
+			}
+			return true
+		}
+	} else if 3 == method {
+		if nil != r && r.MatchString(string(text.Tokens)) {
+			newContent := []byte(r.ReplaceAllString(string(text.Tokens), replacement))
+			tree := parse.Inline("", newContent, luteEngine.ParseOptions)
+			if nil == tree.Root.FirstChild {
+				return false
+			}
+
+			var replaceNodes []*ast.Node
+			for rNode := tree.Root.FirstChild.FirstChild; nil != rNode; rNode = rNode.Next {
+				replaceNodes = append(replaceNodes, rNode)
+			}
+
+			for _, rNode := range replaceNodes {
+				text.InsertBefore(rNode)
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func replaceNodeTokens(n *ast.Node, method int, keyword string, replacement string, r *regexp.Regexp) {
@@ -1479,8 +1539,8 @@ func stringQuery(query string) string {
 
 // markReplaceSpan 用于处理搜索高亮。
 func markReplaceSpan(n *ast.Node, unlinks *[]*ast.Node, keywords []string, markSpanDataType string, luteEngine *lute.Lute) bool {
-	text := n.Content()
 	if ast.NodeText == n.Type {
+		text := n.Content()
 		escapedText := util.EscapeHTML(text)
 		escapedKeywords := make([]string, len(keywords))
 		for i, keyword := range keywords {
@@ -1508,6 +1568,17 @@ func markReplaceSpan(n *ast.Node, unlinks *[]*ast.Node, keywords []string, markS
 
 		if n.IsTextMarkType("inline-math") || n.IsTextMarkType("inline-memo") {
 			return false
+		}
+
+		var text string
+		if n.IsTextMarkType("code") {
+			// code 在前面的 n.
+			for i, k := range keywords {
+				keywords[i] = html.EscapeString(k)
+			}
+			text = n.TextMarkTextContent
+		} else {
+			text = n.Content()
 		}
 
 		startTag := search.GetMarkSpanStart(markSpanDataType)

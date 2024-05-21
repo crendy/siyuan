@@ -258,6 +258,8 @@ func performTx(tx *Transaction) (ret *TxErr) {
 			ret = tx.doSortAttrViewRow(op)
 		case "sortAttrViewCol":
 			ret = tx.doSortAttrViewColumn(op)
+		case "sortAttrViewKey":
+			ret = tx.doSortAttrViewKey(op)
 		case "updateAttrViewCell":
 			ret = tx.doUpdateAttrViewCell(op)
 		case "updateAttrViewColOptions":
@@ -799,6 +801,7 @@ func (tx *Transaction) doDelete(operation *Operation) (ret *TxErr) {
 }
 
 func removeAvBlockRel(node *ast.Node) {
+	var avIDs []string
 	ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 		if !entering {
 			return ast.WalkContinue
@@ -806,10 +809,16 @@ func removeAvBlockRel(node *ast.Node) {
 
 		if ast.NodeAttributeView == n.Type {
 			avID := n.AttributeViewID
-			av.RemoveBlockRel(avID, n.ID)
+			if changed := av.RemoveBlockRel(avID, n.ID, treenode.ExistBlockTree); changed {
+				avIDs = append(avIDs, avID)
+			}
 		}
 		return ast.WalkContinue
 	})
+	avIDs = gulu.Str.RemoveDuplicatedElem(avIDs)
+	for _, avID := range avIDs {
+		util.PushReloadAttrView(avID)
+	}
 }
 
 func syncDelete2AttributeView(node *ast.Node) {
@@ -854,7 +863,7 @@ func syncDelete2AttributeView(node *ast.Node) {
 	})
 
 	for _, avID := range changedAvIDs.Values() {
-		util.BroadcastByType("protyle", "refreshAttributeView", 0, "", map[string]interface{}{"id": avID})
+		util.PushReloadAttrView(avID.(string))
 	}
 }
 
@@ -1127,6 +1136,7 @@ func refreshHeadingChildrenUpdated(heading *ast.Node, updated string) {
 }
 
 func upsertAvBlockRel(node *ast.Node) {
+	var avIDs []string
 	ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
 		if !entering {
 			return ast.WalkContinue
@@ -1134,10 +1144,16 @@ func upsertAvBlockRel(node *ast.Node) {
 
 		if ast.NodeAttributeView == n.Type {
 			avID := n.AttributeViewID
-			av.UpsertBlockRel(avID, n.ID)
+			if changed := av.UpsertBlockRel(avID, n.ID); changed {
+				avIDs = append(avIDs, avID)
+			}
 		}
 		return ast.WalkContinue
 	})
+	avIDs = gulu.Str.RemoveDuplicatedElem(avIDs)
+	for _, avID := range avIDs {
+		util.PushReloadAttrView(avID)
+	}
 }
 
 func (tx *Transaction) doUpdateUpdated(operation *Operation) (ret *TxErr) {
@@ -1227,7 +1243,7 @@ func (tx *Transaction) doSetAttrs(operation *Operation) (ret *TxErr) {
 func refreshUpdated(node *ast.Node) {
 	updated := util.CurrentTimeSecondsStr()
 	node.SetIALAttr("updated", updated)
-	parents := treenode.ParentNodes(node)
+	parents := treenode.ParentNodesWithHeadings(node)
 	for _, parent := range parents { // 更新所有父节点的更新时间字段
 		parent.SetIALAttr("updated", updated)
 	}
@@ -1242,7 +1258,7 @@ func createdUpdated(node *ast.Node) {
 	if updated < created {
 		updated = created // 复制粘贴块后创建时间小于更新时间 https://github.com/siyuan-note/siyuan/issues/3624
 	}
-	parents := treenode.ParentNodes(node)
+	parents := treenode.ParentNodesWithHeadings(node)
 	for _, parent := range parents { // 更新所有父节点的更新时间字段
 		parent.SetIALAttr("updated", updated)
 		cache.PutBlockIAL(parent.ID, parse.IAL2Map(parent.KramdownIAL))
@@ -1262,17 +1278,18 @@ type Operation struct {
 
 	DeckID string `json:"deckID"` // 用于添加/删除闪卡
 
-	AvID                string   `json:"avID"`              // 属性视图 ID
-	SrcIDs              []string `json:"srcIDs"`            // 用于将块拖拽到属性视图中
-	IsDetached          bool     `json:"isDetached"`        // 用于标识是否未绑定块，仅存在于属性视图中
-	IgnoreFillFilterVal bool     `json:"ignoreFillFilter"`  // 用于标识是否忽略填充筛选值
-	Name                string   `json:"name"`              // 属性视图列名
-	Typ                 string   `json:"type"`              // 属性视图列类型
-	Format              string   `json:"format"`            // 属性视图列格式化
-	KeyID               string   `json:"keyID"`             // 属性视列 ID
-	RowID               string   `json:"rowID"`             // 属性视图行 ID
-	IsTwoWay            bool     `json:"isTwoWay"`          // 属性视图关联列是否是双向关系
-	BackRelationKeyID   string   `json:"backRelationKeyID"` // 属性视图关联列回链关联列的 ID
+	AvID                string                   `json:"avID"`              // 属性视图 ID
+	SrcIDs              []string                 `json:"srcIDs"`            // 用于从属性视图中删除行
+	Srcs                []map[string]interface{} `json:"srcs"`              // 用于添加属性视图行（包括绑定块）{id, content, isDetached}
+	IsDetached          bool                     `json:"isDetached"`        // 用于标识是否未绑定块，仅存在于属性视图中
+	IgnoreFillFilterVal bool                     `json:"ignoreFillFilter"`  // 用于标识是否忽略填充筛选值
+	Name                string                   `json:"name"`              // 属性视图列名
+	Typ                 string                   `json:"type"`              // 属性视图列类型
+	Format              string                   `json:"format"`            // 属性视图列格式化
+	KeyID               string                   `json:"keyID"`             // 属性视列 ID
+	RowID               string                   `json:"rowID"`             // 属性视图行 ID
+	IsTwoWay            bool                     `json:"isTwoWay"`          // 属性视图关联列是否是双向关系
+	BackRelationKeyID   string                   `json:"backRelationKeyID"` // 属性视图关联列回链关联列的 ID
 }
 
 type Transaction struct {
@@ -1363,7 +1380,7 @@ func (tx *Transaction) writeTree(tree *parse.Tree) (err error) {
 	return
 }
 
-// refreshDynamicRefText 用于刷新引用块的动态锚文本。
+// refreshDynamicRefText 用于刷新块引用的动态锚文本。
 // 该实现依赖了数据库缓存，导致外部调用时可能需要阻塞等待数据库写入后才能获取到 refs
 func refreshDynamicRefText(updatedDefNode *ast.Node, updatedTree *parse.Tree) {
 	changedDefs := map[string]*ast.Node{updatedDefNode.ID: updatedDefNode}
@@ -1371,7 +1388,7 @@ func refreshDynamicRefText(updatedDefNode *ast.Node, updatedTree *parse.Tree) {
 	refreshDynamicRefTexts(changedDefs, changedTrees)
 }
 
-// refreshDynamicRefTexts 用于批量刷新引用块的动态锚文本。
+// refreshDynamicRefTexts 用于批量刷新块引用的动态锚文本。
 // 该实现依赖了数据库缓存，导致外部调用时可能需要阻塞等待数据库写入后才能获取到 refs
 func refreshDynamicRefTexts(updatedDefNodes map[string]*ast.Node, updatedTrees map[string]*parse.Tree) {
 	// 1. 更新引用的动态锚文本
@@ -1470,7 +1487,7 @@ func refreshDynamicRefTexts(updatedDefNodes map[string]*ast.Node, updatedTrees m
 			}
 			if changedAv {
 				av.SaveAttributeView(attrView)
-				util.BroadcastByType("protyle", "refreshAttributeView", 0, "", map[string]interface{}{"id": avID})
+				util.PushReloadAttrView(avID)
 			}
 		}
 	}

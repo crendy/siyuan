@@ -23,6 +23,7 @@ type TOperation =
     | "updateAttrViewColTemplate"
     | "sortAttrViewRow"
     | "sortAttrViewCol"
+    | "sortAttrViewKey"
     | "setAttrViewColPin"
     | "setAttrViewColHidden"
     | "setAttrViewColWrap"
@@ -199,6 +200,7 @@ interface IPosition {
 interface ISaveLayout {
     name: string,
     layout: IObject
+    time: number
 }
 
 interface IWorkspace {
@@ -235,6 +237,7 @@ interface IPluginSettingOption {
     title: string
     description?: string
     actionElement?: HTMLElement
+    direction?: "column" | "row"
 
     createActionElement?(): HTMLElement
 }
@@ -478,12 +481,20 @@ interface IOperation {
     nextID?: string // insert 专享
     isDetached?: boolean // insertAttrViewBlock 专享
     ignoreFillFilter?: boolean // insertAttrViewBlock 专享
-    srcIDs?: string[] // insertAttrViewBlock 专享
+    srcIDs?: string[] // removeAttrViewBlock 专享
+    srcs?: IOperationSrcs[] // insertAttrViewBlock 专享
     name?: string // addAttrViewCol 专享
     type?: TAVCol // addAttrViewCol 专享
     deckID?: string // add/removeFlashcards 专享
     blockIDs?: string[] // add/removeFlashcards 专享
 }
+
+interface IOperationSrcs {
+    id: string,
+    content?: string,
+    isDetached: boolean
+}
+
 
 interface IObject {
     [key: string]: string;
@@ -533,10 +544,7 @@ interface IPluginData {
 
 interface IPluginDockTab {
     position: TPluginDockPosition,
-    size: {
-        width: number,
-        height: number
-    },
+    size: Config.IUILayoutDockPanelSize,
     icon: string,
     hotkey?: string,
     title: string,
@@ -824,7 +832,7 @@ interface IAVColumn {
         name: string,
         color: string,
     }[],
-    relation?: IAVCellRelationValue,
+    relation?: IAVColumnRelation,
     rollup?: IAVCellRollupValue
 }
 
@@ -842,6 +850,7 @@ interface IAVCell {
 }
 
 interface IAVCellValue {
+    keyID?: string,
     id?: string,
     type: TAVCol,
     isDetached?: boolean,
@@ -875,16 +884,18 @@ interface IAVCellValue {
     checkbox?: {
         checked: boolean
     }
-    relation?: {
-        blockIDs: string[]
-        contents?: IAVCellValue[]
-    }
+    relation?: IAVCellRelationValue
     rollup?: {
         contents?: IAVCellValue[]
     }
     date?: IAVCellDateValue
     created?: IAVCellDateValue
     updated?: IAVCellDateValue
+}
+
+interface IAVCellRelationValue {
+    blockIDs: string[]
+    contents?: IAVCellValue[]
 }
 
 interface IAVCellDateValue {
@@ -908,7 +919,7 @@ interface IAVCellAssetValue {
     type: "file" | "image"
 }
 
-interface IAVCellRelationValue {
+interface IAVColumnRelation {
     avID?: string
     backKeyID?: string
     isTwoWay?: boolean
