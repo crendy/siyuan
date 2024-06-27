@@ -1,5 +1,5 @@
 #FROM node:16 as NODE_BUILD
-FROM registry.cn-hangzhou.aliyuncs.com/crendy/node:21 as NODE_BUILD
+FROM registry.cn-hangzhou.aliyuncs.com/crendy/node:18.12 as NODE_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 ADD . /go/src/github.com/siyuan-note/siyuan/
 RUN apt-get update && \
