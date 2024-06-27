@@ -22,7 +22,7 @@ RUN rm -rf /var/lib/apt/lists/*
 FROM registry.cn-hangzhou.aliyuncs.com/crendy/golang:alpine as GO_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 COPY --from=NODE_BUILD /go/src/github.com/siyuan-note/siyuan/ /go/src/github.com/siyuan-note/siyuan/
-ENV GO111MODULE=on \
+ENV GO111MODULE=off \
     GOPROXY=https://goproxy.cn,direct
 ENV CGO_ENABLED=1
 RUN apk add --no-cache gcc musl-dev && \
