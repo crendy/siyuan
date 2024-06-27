@@ -19,7 +19,7 @@ RUN apt-get autoremove -y
 RUN rm -rf /var/lib/apt/lists/*
 
 #FROM golang:alpine as GO_BUILD
-FROM golang:alpine as GO_BUILD
+FROM registry.cn-hangzhou.aliyuncs.com/crendy/golang:alpine as GO_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 COPY --from=NODE_BUILD /go/src/github.com/siyuan-note/siyuan/ /go/src/github.com/siyuan-note/siyuan/
 ENV GO111MODULE=on \
@@ -35,7 +35,7 @@ RUN apk add --no-cache gcc musl-dev && \
     mv /go/src/github.com/siyuan-note/siyuan/kernel/kernel /opt/siyuan/ && \
     find /opt/siyuan/ -name .git | xargs rm -rf
 
-FROM alpine:latest
+FROM registry.cn-hangzhou.aliyuncs.com/crendy/alpine:latest
 LABEL maintainer="crendy<crendy@126.com>"
 
 WORKDIR /opt/siyuan/
