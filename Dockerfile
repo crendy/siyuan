@@ -19,7 +19,7 @@ RUN apt-get autoremove -y
 RUN rm -rf /var/lib/apt/lists/*
 
 #FROM golang:alpine as GO_BUILD
-FROM registry.cn-hangzhou.aliyuncs.com/crendy/golang:alpine as GO_BUILD
+FROM registry.cn-hangzhou.aliyuncs.com/crendy/golang:1.22.0-alpine as GO_BUILD
 WORKDIR /go/src/github.com/siyuan-note/siyuan/
 COPY --from=NODE_BUILD /go/src/github.com/siyuan-note/siyuan/ /go/src/github.com/siyuan-note/siyuan/
 ENV GO111MODULE=on \
