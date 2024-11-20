@@ -19,7 +19,9 @@ export const globalClick = (event: MouseEvent & { target: HTMLElement }) => {
             document.querySelector("#dockMoveItem")?.remove();
         } else {
             const startElement = ghostElement.parentElement.querySelector(`[data-node-id="${ghostElement.getAttribute("data-node-id")}"]`) as HTMLElement;
-            startElement ? startElement.style.opacity = "" : "";
+            if (startElement) {
+                startElement.style.opacity = "";
+            }
             ghostElement.parentElement.querySelectorAll(".dragover__top, .dragover__bottom, .dragover").forEach((item: HTMLElement) => {
                 item.classList.remove("dragover__top", "dragover__bottom", "dragover");
                 item.style.opacity = "";
@@ -73,8 +75,8 @@ export const globalClick = (event: MouseEvent & { target: HTMLElement }) => {
     }
 
     // 点击空白，pdf 搜索、更多消失
-    if (hasClosestByAttribute(event.target, "id", "secondaryToolbarToggle") ||
-        hasClosestByAttribute(event.target, "id", "viewFind") ||
+    if (hasClosestByAttribute(event.target, "id", "secondaryToolbarToggleButton") ||
+        hasClosestByAttribute(event.target, "id", "viewFindButton") ||
         hasClosestByAttribute(event.target, "id", "findbar")) {
         return;
     }

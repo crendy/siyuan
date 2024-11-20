@@ -57,7 +57,7 @@ func GetLocalIPs() (ret []string) {
 
 	ret = []string{}
 	addrs, err := net.InterfaceAddrs()
-	if nil != err {
+	if err != nil {
 		logging.LogWarnf("get interface addresses failed: %s", err)
 		return
 	}
@@ -177,6 +177,21 @@ func GetChildDocDepth(treeAbsPath string) (ret int) {
 	})
 	ret = depth - baseDepth
 	return
+}
+
+func NormalizeConcurrentReqs(concurrentReqs int, provider int) int {
+	if 1 > concurrentReqs {
+		if 2 == provider { // S3
+			return 8
+		} else if 3 == provider { // WebDAV
+			return 1
+		}
+		return 8
+	}
+	if 16 < concurrentReqs {
+		return 16
+	}
+	return concurrentReqs
 }
 
 func NormalizeTimeout(timeout int) int {

@@ -33,6 +33,7 @@ RUN apk add --no-cache gcc musl-dev && \
     mv /go/src/github.com/siyuan-note/siyuan/app/guide/ /opt/siyuan/ && \
     mv /go/src/github.com/siyuan-note/siyuan/app/changelogs/ /opt/siyuan/ && \
     mv /go/src/github.com/siyuan-note/siyuan/kernel/kernel /opt/siyuan/ && \
+    mv /go/src/github.com/siyuan-note/siyuan/kernel/entrypoint.sh /opt/siyuan/entrypoint.sh && \
     find /opt/siyuan/ -name .git | xargs rm -rf
 
 FROM registry.cn-hangzhou.aliyuncs.com/crendy/alpine:latest

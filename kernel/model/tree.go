@@ -153,13 +153,13 @@ func pagedPaths(localPath string, pageSize int) (ret map[int][]string) {
 
 func loadTree(localPath string, luteEngine *lute.Lute) (ret *parse.Tree, err error) {
 	data, err := filelock.ReadFile(localPath)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("get data [path=%s] failed: %s", localPath, err)
 		return
 	}
 
 	ret, err = filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("parse json to tree [%s] failed: %s", localPath, err)
 		return
 	}
@@ -192,7 +192,9 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 		searchTreeInFilesystem(id)
 		bt = treenode.GetBlockTree(id)
 		if nil == bt {
-			logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, logging.ShortStack())
+			if "dev" == util.Mode {
+				logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, logging.ShortStack())
+			}
 			return nil, ErrTreeNotFound
 		}
 	}
@@ -203,8 +205,8 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 }
 
 func LoadTreeByBlockID(id string) (ret *parse.Tree, err error) {
-	if "" == id {
-		logging.LogErrorf("block id is empty")
+	if !ast.IsNodeIDPattern(id) {
+		logging.LogErrorf("block id is invalid [id=%s]", id)
 		return nil, ErrTreeNotFound
 	}
 
@@ -215,7 +217,12 @@ func LoadTreeByBlockID(id string) (ret *parse.Tree, err error) {
 			return
 		}
 
-		logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, logging.ShortStack())
+		stack := logging.ShortStack()
+		if !strings.Contains(stack, "BuildBlockBreadcrumb") {
+			if "dev" == util.Mode {
+				logging.LogWarnf("block tree not found [id=%s], stack: [%s]", id, stack)
+			}
+		}
 		return nil, ErrTreeNotFound
 	}
 
@@ -281,7 +288,7 @@ func searchTreeInFilesystem(rootID string) {
 	}
 
 	tree, err := filesys.LoadTree(boxID, treePath, util.NewLute())
-	if nil != err {
+	if err != nil {
 		logging.LogErrorf("load tree [%s] failed: %s", treePath, err)
 		return
 	}

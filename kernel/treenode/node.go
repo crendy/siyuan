@@ -46,7 +46,7 @@ func GetEmbedBlockRef(embedNode *ast.Node) (blockRefID string) {
 
 	stmt := scriptNode.TokensStr()
 	parsedStmt, err := sqlparser.Parse(stmt)
-	if nil != err {
+	if err != nil {
 		return
 	}
 
@@ -116,7 +116,7 @@ func IsEmbedBlockRef(n *ast.Node) bool {
 
 func FormatNode(node *ast.Node, luteEngine *lute.Lute) string {
 	markdown, err := lute.FormatNodeSync(node, luteEngine.ParseOptions, luteEngine.RenderOptions)
-	if nil != err {
+	if err != nil {
 		root := TreeRoot(node)
 		logging.LogFatalf(logging.ExitCodeFatal, "format node [%s] in tree [%s] failed: %s", node.ID, root.ID, err)
 	}
@@ -125,7 +125,7 @@ func FormatNode(node *ast.Node, luteEngine *lute.Lute) string {
 
 func ExportNodeStdMd(node *ast.Node, luteEngine *lute.Lute) string {
 	markdown, err := lute.ProtyleExportMdNodeSync(node, luteEngine.ParseOptions, luteEngine.RenderOptions)
-	if nil != err {
+	if err != nil {
 		root := TreeRoot(node)
 		logging.LogFatalf(logging.ExitCodeFatal, "export markdown for node [%s] in tree [%s] failed: %s", node.ID, root.ID, err)
 	}
@@ -169,7 +169,7 @@ func GetNodeSrcTokens(n *ast.Node) (ret string) {
 		src := n.Tokens[index+len("src=\""):]
 		if index = bytes.Index(src, []byte("\"")); 0 < index {
 			src = src[:bytes.Index(src, []byte("\""))]
-			if !IsRelativePath(src) {
+			if !util.IsAssetLinkDest(src) {
 				return
 			}
 
@@ -180,16 +180,6 @@ func GetNodeSrcTokens(n *ast.Node) (ret string) {
 		logging.LogWarnf("src is missing the closing double quote in tree [%s] ", n.Box+n.Path)
 	}
 	return
-}
-
-func IsRelativePath(dest []byte) bool {
-	if 1 > len(dest) {
-		return false
-	}
-	if '/' == dest[0] {
-		return false
-	}
-	return !bytes.Contains(dest, []byte(":"))
 }
 
 func FirstLeafBlock(node *ast.Node) (ret *ast.Node) {
